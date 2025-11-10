@@ -1,122 +1,120 @@
-/* ---------- Global Reset & Theme ---------- */
-* { box-sizing: border-box; }
-:root { color-scheme: dark; }
+/* ---------- Reset & base ---------- */
+*,
+*::before,
+*::after { box-sizing: border-box; }
+
 html, body { height: 100%; }
 body {
   margin: 0;
-  background: #0a0f1b;           /* --bg */
-  color: #e5e7eb;                /* --text */
-  font-family: ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, Ubuntu, Cantarell, Noto Sans, "Helvetica Neue", Arial, "Apple Color Emoji", "Segoe UI Emoji", "Segoe UI Symbol";
+  font-family: ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, Helvetica, Arial, "Apple Color Emoji", "Segoe UI Emoji";
+  color: #111827;
+  background: radial-gradient(1200px 800px at 20% 0%, #f3f4f6 0%, #e5e7eb 40%, #e5e7eb 100%);
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
 }
 
-/* ---------- Typography ---------- */
-.h1 { font-weight: 700; font-size: 20px; line-height: 1.2; }
-.mono { font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace; font-size: 14px; opacity: .92; }
-a { color: inherit; text-decoration: none; }
-::selection { background: rgba(37, 99, 235, .35); }
+/* 页面容器：让内容水平垂直居中 */
+.app {
+  min-height: 100dvh;
+  display: grid;
+  place-items: center;
+  padding: 24px;
+}
 
-/* ---------- Layout ---------- */
-.container { display: grid; gap: 16px; padding: 20px; max-width: 480px; margin: 0 auto; }
-.grid { display: grid; gap: 16px; }
-.row { display: flex; gap: 8px; align-items: center; }
-
+/* ---------- Card & layout ---------- */
 .card {
-  background: #111827;           /* --surface */
-  border: 1px solid #1f2937;     /* --border */
-  border-radius: 14px;
+  width: min(92vw, 560px);
+  background: #ffffffcc;
+  backdrop-filter: blur(6px);
+  border: 1px solid #e5e7eb;
+  border-radius: 16px;
+  box-shadow: 0 8px 30px rgba(0,0,0,.06);
   padding: 16px;
-  box-shadow: 0 8px 24px rgba(0,0,0,.25);
+}
+
+.row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.h1 {
+  font-weight: 800;
+  font-size: clamp(24px, 2.6vw, 32px);
+  letter-spacing: 0.02em;
+}
+
+.mono {
+  font-variant-numeric: tabular-nums;
+  font-feature-settings: "tnum" 1, "cv01" 1;
+  color: #6b7280;
+  font-size: 14px;
 }
 
 /* ---------- Buttons ---------- */
 .btn {
   appearance: none;
-  border: none;
-  background: #2563eb;           /* --brand */
-  color: #fff;
+  border: 1px solid #e5e7eb;
+  background: #fff;
+  color: #111827;
   padding: 10px 14px;
   border-radius: 10px;
   font-weight: 600;
   cursor: pointer;
-  transition: transform .06s ease, filter .15s ease, opacity .15s ease;
+  transition: transform .02s ease, box-shadow .15s ease, background .15s ease;
 }
-.btn:hover { filter: brightness(1.05); }
-.btn:active { transform: translateY(1px) scale(.99); }
-.btn:disabled { opacity: .55; cursor: not-allowed; }
-.btn:focus-visible {
-  outline: 2px solid rgba(37, 99, 235, .9);
-  outline-offset: 2px;
-  border-radius: 12px;
-}
+.btn:hover { box-shadow: 0 6px 18px rgba(0,0,0,.08); }
+.btn:active { transform: translateY(1px) scale(.995); }
+.btn[disabled] { opacity: .6; cursor: not-allowed; }
 
-/* ---------- 2048 Board ---------- */
-.board {
-  display: grid;
-  gap: 8px;
-  grid-template-columns: repeat(4, 1fr);
+/* ---------- Grid (4x4 board) ---------- */
+.grid {
+  /* 让格子永远为正方形且自适应屏幕 */
   margin-top: 12px;
+  width: 100%;
+  aspect-ratio: 1 / 1;
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 10px;
+  padding: 10px;
+  background: #cdc1b4;
+  border-radius: 12px;
+  border: 1px solid #e5e7eb;
+}
+
+/* 单元格：正方形 + 居中数字 */
+.cell {
+  display: grid;
+  place-items: center;
+  aspect-ratio: 1 / 1;
+  border-radius: 10px;
+  font-weight: 800;
+  /* 数字大小随容器自适应：在手机也不会爆掉 */
+  font-size: clamp(18px, 5.2vw, 34px);
   user-select: none;
-}
-.board .row { display: contents; }
-
-.tile {
-  height: 70px;                  /* 基础尺寸，下面有自适应 */
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  border-radius: 10px;
-  font-weight: 700;
-  font-size: 20px;
-  transition: transform .08s ease, background-color .15s ease, color .15s ease;
-  box-shadow: inset 0 0 0 1px rgba(255,255,255,.04), 0 4px 10px rgba(0,0,0,.25);
+  -webkit-user-select: none;
 }
 
-/* 空格与数字配色（贴近 2048 视觉） */
-.tile.v0    { background: #1f2937; color: #9ca3af; }
-.tile.v2    { background: #eee4da; color: #776e65; }
-.tile.v4    { background: #ede0c8; color: #776e65; }
-.tile.v8    { background: #f2b179; color: #f9f6f2; }
-.tile.v16   { background: #f59563; color: #f9f6f2; }
-.tile.v32   { background: #f67c5f; color: #f9f6f2; }
-.tile.v64   { background: #f65e3b; color: #f9f6f2; }
-.tile.v128  { background: #edcf72; color: #111827; font-size: 19px; }
-.tile.v256  { background: #edcc61; color: #111827; font-size: 19px; }
-.tile.v512  { background: #edc850; color: #111827; font-size: 18px; }
-.tile.v1024 { background: #edc53f; color: #111827; font-size: 18px; }
-.tile.v2048 { background: #edc22e; color: #111827; font-size: 18px; }
+/* ---------- Tile colors (2048 经典配色) ---------- */
+.tile-0  { background: #eee4da33; color: transparent; }
+.tile-2  { background: #eee4da; color: #776e65; }
+.tile-4  { background: #ede0c8; color: #776e65; }
+.tile-8  { background: #f2b179; color: #f9f9f9; }
+.tile-16 { background: #f59563; color: #f9f9f9; }
+.tile-32 { background: #f67c5f; color: #f9f9f9; }
+.tile-64 { background: #f65e3b; color: #f9f9f9; }
+.tile-128{ background: #edcf72; color: #f9f9f9; }
+.tile-256{ background: #edcc61; color: #f9f9f9; }
+.tile-512{ background: #edc850; color: #f9f9f9; }
+.tile-1024{ background: #edc53f; color: #f9f9f9; font-size: clamp(16px, 4.2vw, 28px); }
+.tile-2048{ background: #edc22e; color: #f9f9f9; font-size: clamp(16px, 4.2vw, 28px); }
 
-/* 轻微弹跳效果，可选 */
-.tile:not(.v0) { animation: pop .08s ease; }
-@keyframes pop {
-  from { transform: scale(.98); }
-  to   { transform: scale(1); }
-}
+/* 兼容更大数字（不挤爆） */
+[class*="tile-1"] { word-break: keep-all; }
 
-/* ---------- Responsive ---------- */
-@media (max-width: 480px) {
-  .container { padding: 16px; gap: 14px; }
-  .tile { height: 64px; font-size: 18px; }
+/* 小屏优化：让卡片更紧凑 */
+@media (max-width: 420px) {
+  .card { padding: 12px; border-radius: 14px; }
+  .grid { gap: 8px; padding: 8px; }
+  .btn { padding: 9px 12px; }
 }
-@media (max-width: 380px) {
-  .tile { height: 58px; font-size: 17px; }
-}
-
-/* ---------- Accessibility Helpers ---------- */
-.sr-only {
-  position: absolute !important;
-  width: 1px; height: 1px;
-  padding: 0; margin: -1px;
-  overflow: hidden; clip: rect(0, 0, 1px, 1px);
-  white-space: nowrap; border: 0;
-}
-
-/* ---------- Subtle Scrollbar (optional) ---------- */
-::-webkit-scrollbar { width: 10px; height: 10px; }
-::-webkit-scrollbar-thumb {
-  background: #1f2937;
-  border-radius: 10px;
-  border: 2px solid #0a0f1b;
-}
-::-webkit-scrollbar-track { background: transparent; }
