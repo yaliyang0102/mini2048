@@ -1,13 +1,13 @@
-// src/app/game-client.tsx（示例）
-import dynamic from "next/dynamic";
-import { Providers } from "./providers";
+// src/app/game-client.tsx
+"use client";
 
-const GameBoard = dynamic(() => import("../components/GameBoard"), { ssr: false });
+import { Providers } from "./providers";
+import GameBoard from "../components/GameBoard";
 
 export default function GameClient() {
   return (
     <Providers>
-      <GameBoard onGameOver={(s) => console.log("score:", s)} />
+      <GameBoard />
     </Providers>
   );
 }
