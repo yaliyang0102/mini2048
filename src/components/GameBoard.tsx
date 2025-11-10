@@ -1,360 +1,238 @@
-"use client";
+'use client';
 
-import { useEffect, useRef, useState } from "react";
-import MintButton from "./MintButton";
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 
 type Board = number[][];
-const SIZE = 4;
-const SWIPE_THRESHOLD = 24; // px
+type Dir = 'up' | 'down' | 'left' | 'right';
 
-interface Props {
-  /** 游戏结束时回调（传入最终分数） */
-  onGameOver?: (finalScore: number) => void;
-  /** 分数变化时回调 */
-  onScoreChange?: (score: number) => void;
-  /** 解锁 Mint 的阈值（默认 2048） */
-  threshold?: number;
+const SIZE = 4;
+const WIN = 2048;
+
+// ---- 工具函数 ----
+const clone = (b: Board): Board => b.map((r) => r.slice());
+const emptyBoard = (): Board => Array.from({ length: SIZE }, () => Array(SIZE).fill(0));
+
+function randomEmptyCell(b: Board): [number, number] | null {
+  const empties: [number, number][] = [];
+  for (let i = 0; i < SIZE; i++) {
+    for (let j = 0; j < SIZE; j++) if (b[i][j] === 0) empties.push([i, j]);
+  }
+  if (!empties.length) return null;
+  return empties[Math.floor(Math.random() * empties.length)];
 }
 
-export default function GameBoard({
-  onGameOver,
-  onScoreChange,
-  threshold = 2048,
-}: Props) {
-  const [board, setBoard] = useState<Board>(() => makeEmptyBoard());
+function addRandomTile(b: Board): Board {
+  const cell = randomEmptyCell(b);
+  if (!cell) return b;
+  const [i, j] = cell;
+  const val = Math.random() < 0.9 ? 2 : 4;
+  const nb = clone(b);
+  nb[i][j] = val;
+  return nb;
+}
+
+function compressRow(row: number[]): number[] {
+  const nums = row.filter((x) => x !== 0);
+  while (nums.length < SIZE) nums.push(0);
+  return nums;
+}
+
+function mergeRow(row: number[]): { row: number[]; gained: number } {
+  const r = row.slice();
+  let gained = 0;
+  for (let i = 0; i < SIZE - 1; i++) {
+    if (r[i] !== 0 && r[i] === r[i + 1]) {
+      r[i] *= 2;
+      gained += r[i];
+      r[i + 1] = 0;
+      i++;
+    }
+  }
+  return { row: compressRow(r), gained };
+}
+
+function rotateRight(b: Board): Board {
+  const res = emptyBoard();
+  for (let i = 0; i < SIZE; i++) for (let j = 0; j < SIZE; j++) res[j][SIZE - 1 - i] = b[i][j];
+  return res;
+}
+
+function rotateLeft(b: Board): Board {
+  const res = emptyBoard();
+  for (let i = 0; i < SIZE; i++) for (let j = 0; j < SIZE; j++) res[SIZE - 1 - j][i] = b[i][j];
+  return res;
+}
+
+function flipRow(row: number[]): number[] {
+  return row.slice().reverse();
+}
+
+function boardsEqual(a: Board, b: Board) {
+  for (let i = 0; i < SIZE; i++) for (let j = 0; j < SIZE; j++) if (a[i][j] !== b[i][j]) return false;
+  return true;
+}
+
+function anyMoves(b: Board) {
+  // 有空位或可合并即还有路
+  for (let i = 0; i < SIZE; i++) for (let j = 0; j < SIZE; j++) {
+    if (b[i][j] === 0) return true;
+    if (i < SIZE - 1 && b[i][j] === b[i + 1][j]) return true;
+    if (j < SIZE - 1 && b[i][j] === b[i][j + 1]) return true;
+  }
+  return false;
+}
+
+// ---- 组件 ----
+export default function GameBoard() {
+  const containerRef = useRef<HTMLDivElement>(null);
+  const [board, setBoard] = useState<Board>(() => {
+    // 初始放两块
+    let b = emptyBoard();
+    b = addRandomTile(addRandomTile(b));
+    return b;
+  });
   const [score, setScore] = useState(0);
   const [best, setBest] = useState(0);
-  const [gameOver, setGameOver] = useState(false);
+  const [over, setOver] = useState(false);
 
-  // touch state
-  const touchStartX = useRef(0);
-  const touchStartY = useRef(0);
-
-  // 初始化
+  // 读取/记录最高分
   useEffect(() => {
-    const saved = safeGetLocal("mini2048-state");
-    if (saved) {
-      try {
-        const parsed = JSON.parse(saved);
-        if (Array.isArray(parsed.board) && typeof parsed.score === "number") {
-          setBoard(parsed.board);
-          setScore(parsed.score);
-          setGameOver(parsed.gameOver ?? false);
-        } else {
-          initGame();
-        }
-      } catch {
-        initGame();
-      }
-    } else {
-      initGame();
-    }
-
-    const b = Number(safeGetLocal("mini2048-best") ?? "0") || 0;
-    setBest(b);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+    const saved = Number(localStorage.getItem('best-2048') || 0);
+    setBest(saved);
   }, []);
-
-  // 持久化 + 分数变化回调
   useEffect(() => {
-    safeSetLocal(
-      "mini2048-state",
-      JSON.stringify({ board, score, gameOver })
-    );
     if (score > best) {
       setBest(score);
-      safeSetLocal("mini2048-best", String(score));
+      localStorage.setItem('best-2048', String(score));
     }
-    onScoreChange?.(score);
-  }, [board, score, gameOver, best, onScoreChange]);
+  }, [score, best]);
 
-  // 游戏结束回调
-  useEffect(() => {
-    if (gameOver) onGameOver?.(score);
-  }, [gameOver, score, onGameOver]);
+  const didWin = useMemo(() => board.some(row => row.some(v => v >= WIN)), [board]);
 
-  // 键盘
-  useEffect(() => {
-    const onKey = (e: KeyboardEvent) => {
-      if (gameOver) return;
-      let handled = true;
-      if (e.key === "ArrowLeft") move("L");
-      else if (e.key === "ArrowRight") move("R");
-      else if (e.key === "ArrowUp") move("U");
-      else if (e.key === "ArrowDown") move("D");
-      else handled = false;
-      if (handled) e.preventDefault();
-    };
-    window.addEventListener("keydown", onKey);
-    return () => window.removeEventListener("keydown", onKey);
-  }, [gameOver]);
-
-  // 触控
-  const onTouchStart = (e: React.TouchEvent) => {
-    const t = e.changedTouches[0];
-    touchStartX.current = t.clientX;
-    touchStartY.current = t.clientY;
-  };
-  const onTouchEnd = (e: React.TouchEvent) => {
-    if (gameOver) return;
-    const t = e.changedTouches[0];
-    const dx = t.clientX - touchStartX.current;
-    const dy = t.clientY - touchStartY.current;
-    if (Math.abs(dx) < SWIPE_THRESHOLD && Math.abs(dy) < SWIPE_THRESHOLD) {
-      return;
-    }
-    if (Math.abs(dx) > Math.abs(dy)) {
-      if (dx > 0) move("R");
-      else move("L");
-    } else {
-      if (dy > 0) move("D");
-      else move("U");
-    }
-  };
-
-  function initGame() {
-    const b = makeEmptyBoard();
-    addRandomTile(b);
-    addRandomTile(b);
+  const restart = useCallback(() => {
+    let b = emptyBoard();
+    b = addRandomTile(addRandomTile(b));
     setBoard(b);
     setScore(0);
-    setGameOver(false);
-  }
+    setOver(false);
+  }, []);
 
-  // 一次移动
-  function move(dir: "L" | "R" | "U" | "D") {
-    const before = clone(board);
-    let after: Board = before;
+  // 核心移动：统一转化为“向左移动”来处理
+  const moveLeftOnce = useCallback((b: Board) => {
     let gained = 0;
+    const nb = b.map((row) => {
+      const compressed = compressRow(row);
+      const { row: merged, gained: g } = mergeRow(compressed);
+      gained += g;
+      return merged;
+    });
+    return { nb, gained };
+  }, []);
 
-    if (dir === "L") {
-      ({ board: after, gained } = moveLeft(before));
-    } else if (dir === "R") {
-      ({ board: after, gained } = moveRight(before));
-    } else if (dir === "U") {
-      ({ board: after, gained } = moveUp(before));
-    } else {
-      ({ board: after, gained } = moveDown(before));
+  const move = useCallback((dir: Dir) => {
+    if (over) return;
+
+    let working = board;
+    if (dir === 'up') working = rotateLeft(working);
+    if (dir === 'down') working = rotateRight(working);
+    if (dir === 'right') working = working.map((r) => flipRow(r));
+
+    const { nb, gained } = moveLeftOnce(working);
+
+    let restored = nb;
+    if (dir === 'up') restored = rotateRight(restored);
+    if (dir === 'down') restored = rotateLeft(restored);
+    if (dir === 'right') restored = restored.map((r) => flipRow(r));
+
+    if (!boardsEqual(board, restored)) {
+      let withNew = addRandomTile(restored);
+      setBoard(withNew);
+      if (gained) setScore((s) => s + gained);
+      if (!anyMoves(withNew)) setOver(true);
     }
+  }, [board, moveLeftOnce, over]);
 
-    if (!boardsEqual(before, after)) {
-      addRandomTile(after);
-      setBoard(after);
-      setScore((s) => s + gained);
-      if (isGameOver(after)) setGameOver(true);
-    }
-  }
+  // ---- 键盘 ----
+  useEffect(() => {
+    // 让容器可聚焦并自动聚焦，确保 onKeyDown 能触发
+    containerRef.current?.focus();
 
-  // 渲染
+    const onKey = (e: KeyboardEvent) => {
+      const k = e.key;
+      if (k.startsWith('Arrow')) {
+        e.preventDefault();
+        if (k === 'ArrowUp') move('up');
+        else if (k === 'ArrowDown') move('down');
+        else if (k === 'ArrowLeft') move('left');
+        else if (k === 'ArrowRight') move('right');
+      } else if (k === 'w' || k === 'W') move('up');
+      else if (k === 's' || k === 'S') move('down');
+      else if (k === 'a' || k === 'A') move('left');
+      else if (k === 'd' || k === 'D') move('right');
+    };
+
+    // 用 window 兜底 + passive: false 保证 preventDefault 生效
+    window.addEventListener('keydown', onKey, { passive: false });
+    return () => window.removeEventListener('keydown', onKey as any);
+  }, [move]);
+
+  // ---- 触摸（手机滑动）----
+  const startXY = useRef<{ x: number; y: number } | null>(null);
+
+  const onTouchStart: React.TouchEventHandler<HTMLDivElement> = (e) => {
+    const t = e.touches[0];
+    startXY.current = { x: t.clientX, y: t.clientY };
+  };
+
+  const onTouchEnd: React.TouchEventHandler<HTMLDivElement> = (e) => {
+    if (!startXY.current) return;
+    const t = e.changedTouches[0];
+    const dx = t.clientX - startXY.current.x;
+    const dy = t.clientY - startXY.current.y;
+    startXY.current = null;
+
+    const ax = Math.abs(dx), ay = Math.abs(dy);
+    const TH = 24; // 最小滑动阈值
+    if (Math.max(ax, ay) < TH) return;
+
+    if (ax > ay) move(dx > 0 ? 'right' : 'left');
+    else move(dy > 0 ? 'down' : 'up');
+  };
+
+  // ---- UI ----
   return (
-    <div className="card" onTouchStart={onTouchStart} onTouchEnd={onTouchEnd}>
-      <div
-        className="row"
-        style={{ justifyContent: "space-between", alignItems: "center" }}
-      >
+    <div className="card" style={{ touchAction: 'none' }}>
+      <div className="row" style={{ justifyContent: 'space-between', alignItems: 'center' }}>
         <div className="h1">2048</div>
-        <div className="mono">
-          Score: {score}
-          <span style={{ marginLeft: 12, opacity: 0.7 }}>Best: {best}</span>
-        </div>
+        <div className="mono">Score: {score} &nbsp;&nbsp; Best: {best}</div>
       </div>
 
-      <div className="board">
-        {/* 背景网格 */}
-        {Array.from({ length: SIZE * SIZE }).map((_, i) => (
-          <div key={`bg-${i}`} className="cell" />
-        ))}
-
-        {/* 实际方块 */}
-        {board.flat().map((v, i) => {
-          const r = Math.floor(i / SIZE);
-          const c = i % SIZE;
-          const tileStyle: React.CSSProperties = {
-            gridRowStart: r + 1,
-            gridColumnStart: c + 1,
-            background: tileColor(v),
-            color: v <= 4 ? "#776e65" : "#f9f6f2",
-            transform: "scale(1)",
-          };
-          return (
-            <div key={`tile-${i}-${v}`} className="tile" style={tileStyle}>
-              {v !== 0 ? v : ""}
+      <div
+        ref={containerRef}
+        tabIndex={0}
+        onTouchStart={onTouchStart}
+        onTouchEnd={onTouchEnd}
+        className="grid"
+        aria-label="2048 board"
+        role="application"
+        style={{ outline: 'none' }}
+      >
+        {board.map((row, i) =>
+          row.map((v, j) => (
+            <div key={`${i}-${j}`} className={`cell tile tile-${v || '0'}`}>
+              {v !== 0 ? v : ''}
             </div>
-          );
-        })}
-      </div>
-
-      <div className="row" style={{ marginTop: 12, gap: 8 }}>
-        <button className="btn" onClick={initGame}>
-          重新开始
-        </button>
-        {score >= threshold ? (
-          <div style={{ flex: 1 }}>
-            <MintButton quantity={1} />
-          </div>
-        ) : (
-          <button className="btn" disabled title={`达到 ${threshold} 分解锁 Mint`} style={{ flex: 1 }}>
-            分数达到 {threshold} 解锁 Mint
-          </button>
+          ))
         )}
       </div>
 
-      {gameOver && (
-        <div
-          className="mono"
-          style={{
-            marginTop: 10,
-            textAlign: "center",
-            padding: 8,
-            border: "1px dashed #333",
-            borderRadius: 8,
-            background: "rgba(255,255,255,0.04)",
-          }}
-        >
-          游戏结束！最终得分：{score}
-        </div>
-      )}
-
-      <p className="muted" style={{ marginTop: 12 }}>
-        使用方向键或滑动操作；相同数字合并，冲击 {threshold}！
-      </p>
+      <div className="row" style={{ gap: 8, marginTop: 12 }}>
+        <button className="btn" onClick={restart}>重新开始</button>
+        <span className="mono" aria-live="polite">
+          {over ? '没有可走的路啦～' : '使用方向键或滑动操作；相同数字合并，冲击 2048！'}
+          {didWin ? ' 已达成 2048！继续挑战更高分！' : ''}
+        </span>
+      </div>
     </div>
   );
-}
-
-/* ---------------------------- 2048 核心逻辑 ---------------------------- */
-
-function makeEmptyBoard(): Board {
-  return Array.from({ length: SIZE }, () => Array(SIZE).fill(0));
-}
-function clone(b: Board): Board {
-  return b.map((row) => row.slice());
-}
-function boardsEqual(a: Board, b: Board) {
-  for (let r = 0; r < SIZE; r++) {
-    for (let c = 0; c < SIZE; c++) {
-      if (a[r][c] !== b[r][c]) return false;
-    }
-  }
-  return true;
-}
-function addRandomTile(b: Board) {
-  const empties: Array<{ r: number; c: number }> = [];
-  for (let r = 0; r < SIZE; r++) {
-    for (let c = 0; c < SIZE; c++) {
-      if (b[r][c] === 0) empties.push({ r, c });
-    }
-  }
-  if (empties.length === 0) return;
-  const { r, c } = empties[Math.floor(Math.random() * empties.length)];
-  b[r][c] = Math.random() < 0.9 ? 2 : 4;
-}
-function compressAndMergeRow(row: number[]) {
-  const filtered = row.filter((x) => x !== 0);
-  const merged: number[] = [];
-  let gained = 0;
-  for (let i = 0; i < filtered.length; i++) {
-    if (i < filtered.length - 1 && filtered[i] === filtered[i + 1]) {
-      const v = filtered[i] * 2;
-      merged.push(v);
-      gained += v;
-      i++;
-    } else {
-      merged.push(filtered[i]);
-    }
-  }
-  while (merged.length < SIZE) merged.push(0);
-  return { row: merged, gained };
-}
-function transpose(b: Board): Board {
-  const t = makeEmptyBoard();
-  for (let r = 0; r < SIZE; r++) {
-    for (let c = 0; c < SIZE; c++) {
-      t[c][r] = b[r][c];
-    }
-  }
-  return t;
-}
-function moveLeft(b: Board) {
-  const out = makeEmptyBoard();
-  let gained = 0;
-  for (let r = 0; r < SIZE; r++) {
-    const { row, gained: g } = compressAndMergeRow(b[r]);
-    out[r] = row;
-    gained += g;
-  }
-  return { board: out, gained };
-}
-function moveRight(b: Board) {
-  const out = makeEmptyBoard();
-  let gained = 0;
-  for (let r = 0; r < SIZE; r++) {
-    const reversed = b[r].slice().reverse();
-    const { row, gained: g } = compressAndMergeRow(reversed);
-    out[r] = row.reverse();
-    gained += g;
-  }
-  return { board: out, gained };
-}
-function moveUp(b: Board) {
-  const t = transpose(b);
-  const { board: moved, gained } = moveLeft(t);
-  return { board: transpose(moved), gained };
-}
-function moveDown(b: Board) {
-  const t = transpose(b);
-  const { board: moved, gained } = moveRight(t);
-  return { board: transpose(moved), gained };
-}
-function isGameOver(b: Board) {
-  for (let r = 0; r < SIZE; r++) {
-    for (let c = 0; c < SIZE; c++) {
-      if (b[r][c] === 0) return false;
-    }
-  }
-  for (let r = 0; r < SIZE; r++) {
-    for (let c = 0; c < SIZE; c++) {
-      const v = b[r][c];
-      if (c + 1 < SIZE && b[r][c + 1] === v) return false;
-      if (r + 1 < SIZE && b[r + 1][c] === v) return false;
-    }
-  }
-  return true;
-}
-function tileColor(v: number) {
-  const map: Record<number, string> = {
-    0: "rgba(255,255,255,0.06)",
-    2: "#eee4da",
-    4: "#ede0c8",
-    8: "#f2b179",
-    16: "#f59563",
-    32: "#f67c5f",
-    64: "#f65e3b",
-    128: "#edcf72",
-    256: "#edcc61",
-    512: "#edc850",
-    1024: "#edc53f",
-    2048: "#edc22e",
-    4096: "#3c3a32",
-    8192: "#3c3a32",
-  };
-  return map[v] ?? "#3c3a32";
-}
-
-/* ---------------------------- 小工具 ---------------------------- */
-function safeGetLocal(key: string) {
-  try {
-    if (typeof window === "undefined") return null;
-    return window.localStorage.getItem(key);
-  } catch {
-    return null;
-  }
-}
-function safeSetLocal(key: string, value: string) {
-  try {
-    if (typeof window === "undefined") return;
-    window.localStorage.setItem(key, value);
-  } catch {
-    // ignore
-  }
 }
