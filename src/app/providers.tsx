@@ -1,19 +1,26 @@
-"use client";
+'use client';
 
-import { ReactNode } from "react";
-import { WagmiProvider } from "wagmi";
-import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { wagmiConfig } from "../wagmi";
+import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
+import { WagmiProvider } from 'wagmi';
+import { useState } from 'react';
+import { wagmiConfig } from '../wagmi'; // ✅ 导入完整配置
 
-// 建议放到模块级，避免重复创建导致的上下文丢失
-const queryClient = new QueryClient();
+export function Providers({ children }: { children: React.ReactNode }) {
+  const [queryClient] = useState(() => new QueryClient({
+    defaultOptions: {
+      queries: {
+        retry: 3,
+        staleTime: 1000 * 60 * 5, // 5分钟
+        refetchOnWindowFocus: false, // 避免钱包连接时的重复查询
+      },
+    },
+  }));
 
-export function Providers({ children }: { children: ReactNode }) {
   return (
-    <WagmiProvider config={wagmiConfig}>
-      <QueryClientProvider client={queryClient}>
+    
+      
         {children}
-      </QueryClientProvider>
-    </WagmiProvider>
+      
+    
   );
 }
