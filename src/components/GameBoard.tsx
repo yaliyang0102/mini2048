@@ -6,7 +6,7 @@ import MintButton from "./MintButton";
 type Grid = number[][];
 const SIZE = 4;
 
-// ------ 工具函数 ------
+// ---------- 工具函数 ----------
 const clone = (g: Grid) => g.map((r) => [...r]);
 const emptyCells = (g: Grid) => {
   const cells: Array<[number, number]> = [];
@@ -25,7 +25,8 @@ const addRandomTile = (g: Grid) => {
   g[i][j] = Math.random() < 0.9 ? 2 : 4;
   return g;
 };
-const newGrid = (): Grid => addRandomTile(addRandomTile(Array.from({ length: SIZE }, () => Array(SIZE).fill(0))));
+const newGrid = (): Grid =>
+  addRandomTile(addRandomTile(Array.from({ length: SIZE }, () => Array(SIZE).fill(0))));
 
 const compress = (row: number[]) => row.filter((x) => x !== 0);
 const padRight = (row: number[]) => [...row, ...Array(SIZE - row.length).fill(0)];
@@ -62,32 +63,67 @@ const equalGrid = (a: Grid, b: Grid) =>
   a.every((row, i) => row.every((v, j) => v === b[i][j]));
 
 const hasMove = (g: Grid) => {
-  // 仍有空
   if (emptyCells(g).length) return true;
-  // 横向可合并
   for (let i = 0; i < SIZE; i++)
     for (let j = 0; j < SIZE - 1; j++)
       if (g[i][j] === g[i][j + 1]) return true;
-  // 纵向可合并
   for (let j = 0; j < SIZE; j++)
     for (let i = 0; i < SIZE - 1; i++)
       if (g[i][j] === g[i + 1][j]) return true;
   return false;
 };
 
-// ------ 组件 ------
+// ---------- 新增：内联样式 ----------
+const boardStyle: React.CSSProperties = {
+  display: "grid",
+  gridTemplateColumns: "repeat(4, 1fr)",
+  gap: 10,
+  width: "min(92vw, 420px)",
+  margin: "12px auto",
+  background: "#bbada0",
+  padding: 10,
+  borderRadius: 10,
+};
+
+const colorMap: Record<number, string> = {
+  2: "#eee4da",
+  4: "#ede0c8",
+  8: "#f2b179",
+  16: "#f59563",
+  32: "#f67c5f",
+  64: "#f65e3b",
+  128: "#edcf72",
+  256: "#edcc61",
+  512: "#edc850",
+  1024: "#edc53f",
+  2048: "#edc22e",
+};
+
+const tileStyle = (v: number): React.CSSProperties => ({
+  background: v === 0 ? "#cdc1b4" : colorMap[v] || "#edc53f",
+  color: v <= 4 ? "#776e65" : "#f9f6f2",
+  borderRadius: 8,
+  display: "flex",
+  alignItems: "center",
+  justifyContent: "center",
+  fontWeight: 700,
+  fontSize: "clamp(18px, 6vw, 28px)",
+  aspectRatio: "1 / 1", // 正方形
+  userSelect: "none",
+});
+
+// ---------- 组件 ----------
 export default function GameBoard({ onGameOver }: { onGameOver?: (score: number) => void }) {
   const [grid, setGrid] = useState<Grid>(() => newGrid());
   const [score, setScore] = useState(0);
   const [best, setBest] = useState(0);
   const [movedFlag, setMovedFlag] = useState(false);
 
-  const threshold = 128; // 达到阈值显示 Mint（可自行改成更高）
+  const threshold = 128;
   const containerRef = useRef<HTMLDivElement>(null);
   const touch = useRef<{ x: number; y: number } | null>(null);
 
   useEffect(() => {
-    // 恢复最高分
     try {
       const b = localStorage.getItem("best-score");
       if (b) setBest(parseInt(b));
@@ -95,7 +131,6 @@ export default function GameBoard({ onGameOver }: { onGameOver?: (score: number)
   }, []);
 
   useEffect(() => {
-    // 保存最高分
     if (score > best) {
       setBest(score);
       try {
@@ -137,7 +172,7 @@ export default function GameBoard({ onGameOver }: { onGameOver?: (score: number)
       const dy = t.clientY - touch.current.y;
       const ax = Math.abs(dx);
       const ay = Math.abs(dy);
-      if (Math.max(ax, ay) < 20) return; // 忽略轻微滑动
+      if (Math.max(ax, ay) < 20) return;
       if (ax > ay) move(dx > 0 ? "right" : "left");
       else move(dy > 0 ? "down" : "up");
       touch.current = null;
@@ -151,7 +186,6 @@ export default function GameBoard({ onGameOver }: { onGameOver?: (score: number)
     };
   }, [grid, score]);
 
-  // 合并/移动
   const move = (dir: "left" | "right" | "up" | "down") => {
     let base = clone(grid);
     let rotated = base;
@@ -168,13 +202,11 @@ export default function GameBoard({ onGameOver }: { onGameOver?: (score: number)
     if (dir === "down") restored = transpose(reverseRows(next));
 
     if (!equalGrid(restored, grid)) {
-      // 成功移动
       const withNew = addRandomTile(restored);
       setGrid(withNew);
       setScore((s) => s + scoreAdd);
       setMovedFlag(true);
 
-      // 检查是否结束
       if (!hasMove(withNew)) {
         onGameOver?.(score + scoreAdd);
         setTimeout(() => alert(`Game Over! 得分 ${score + scoreAdd}`), 10);
@@ -189,14 +221,13 @@ export default function GameBoard({ onGameOver }: { onGameOver?: (score: number)
     setScore(0);
   };
 
-  // 渲染 tile
   const tiles = useMemo(
     () =>
       grid.flatMap((row, i) =>
         row.map((v, j) => (
           <div
             key={`${i}-${j}-${v}-${movedFlag ? "m" : "s"}`}
-            className={`tile tile-${v || "empty"}`}
+            style={tileStyle(v)}
           >
             {v || ""}
           </div>
@@ -206,39 +237,51 @@ export default function GameBoard({ onGameOver }: { onGameOver?: (score: number)
   );
 
   return (
-    <div ref={containerRef} className="card">
-      {/* 顶部栏 */}
-      <div className="row" style={{ justifyContent: "space-between", alignItems: "center" }}>
-        <div className="h1">2048</div>
-        <div className="mono">Score: {score} &nbsp; Best: {best}</div>
-      </div>
-
-      {/* 棋盘 */}
-      <div className="board">{tiles}</div>
-
-      {/* 说明 */}
-      <div className="row" style={{ marginTop: 8, gap: 8 }}>
-        <div className="mono" style={{ opacity: 0.8 }}>
-          使用方向键或滑动操作；相同数字合并，冲击 2048！
+    <div ref={containerRef} style={{ maxWidth: 560, margin: "0 auto", padding: 16 }}>
+      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+        <div style={{ fontSize: 28, fontWeight: 800 }}>2048</div>
+        <div style={{ fontFamily: "ui-monospace, SFMono-Regular, Menlo, Consolas, monospace" }}>
+          Score: {score} &nbsp; Best: {best}
         </div>
       </div>
 
-      {/* Mint 区域：未达标显示禁用按钮，达标显示真 Mint */}
-      <div className="row" style={{ gap: 10, marginTop: 12 }}>
-        {score >= threshold ? (
+      <div style={boardStyle}>{tiles}</div>
+
+      <div style={{ opacity: 0.8, marginBottom: 8 }}>
+        使用方向键或滑动操作；相同数字合并，冲击 2048！
+      </div>
+
+      <div style={{ display: "flex", gap: 10 }}>
+        {score >= 128 ? (
           <MintButton quantity={1} />
         ) : (
           <button
-            className="btn"
+            style={{
+              flex: 1,
+              padding: "10px 12px",
+              borderRadius: 8,
+              background: "#aaa",
+              color: "#fff",
+              border: 0,
+              cursor: "not-allowed",
+            }}
+            title="达到 128 分解锁 Mint"
             disabled
-            title={`达到 ${threshold} 分解锁 Mint`}
-            style={{ flex: 1 }}
           >
-            Mint（需 {threshold} 分）
+            Mint（需 128 分）
           </button>
         )}
-
-        <button className="btn" onClick={reset} style={{ flex: 1 }}>
+        <button
+          onClick={reset}
+          style={{
+            flex: 1,
+            padding: "10px 12px",
+            borderRadius: 8,
+            background: "#8f7a66",
+            color: "#fff",
+            border: 0,
+          }}
+        >
           重新开始
         </button>
       </div>
