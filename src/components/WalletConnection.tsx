@@ -1,48 +1,52 @@
-"use client";
+'use client';
 
-import { useAccount, useConnect, useDisconnect } from "wagmi";
-import type { Connector } from "wagmi";
-import { useMemo } from "react";
+import { useAccount, useConnect, useDisconnect } from 'wagmi';
+import { useEffect, useState } from 'react';
 
 export default function WalletConnection() {
   const { address, isConnected } = useAccount();
-  // ✅ wagmi v2: 用 isPending / pendingConnector
-  const { connect, connectors, isPending, pendingConnector } = useConnect();
+  const { connect, connectors, isPending } = useConnect(); // ✅ 移除pendingConnector
   const { disconnect } = useDisconnect();
+  const [isAutoConnecting, setIsAutoConnecting] = useState(true);
 
-  // 选一个可用的 connector（优先 Farcaster，其次第一个 ready 的）
-  const preferred = useMemo<Connector | undefined>(() => {
-    const ready = connectors.filter((c) => c.ready);
-    return ready.find((c) => c.id.toLowerCase().includes("farcaster")) ?? ready[0];
-  }, [connectors]);
+  // 自动连接Farcaster钱包
+  useEffect(() => {
+    if (!isConnected && isAutoConnecting) {
+      const farcasterConnector = connectors.find(
+        connector => connector.name.toLowerCase().includes('farcaster')
+      );
+      
+      if (farcasterConnector) {
+        connect({ connector: farcasterConnector });
+      }
+      setIsAutoConnecting(false);
+    }
+  }, [connectors, isConnected, connect, isAutoConnecting]);
 
-  if (!isConnected) {
-    const waiting = isPending && preferred && pendingConnector?.id === preferred.id;
+  if (isConnected) {
     return (
-      <button
-        type="button"
-        className="btn"
-        onClick={() => preferred && connect({ connector: preferred })}
-        disabled={!preferred || waiting}
-      >
-        {waiting ? "连接中…" : "连接钱包"}
-      </button>
+      
+        已连接: {address?.slice(0,6)}...{address?.slice(-4)}
+         disconnect()}
+          style={{
+            background: '#ff4444',
+            border: 'none',
+            color: 'white',
+            padding: '4px 8px',
+            borderRadius: '4px',
+            cursor: 'pointer',
+            fontSize: '10px'
+          }}
+        >
+          断开
+        
+      
     );
   }
 
   return (
-    <div className="row">
-      <div className="mono">
-        已连接：{address?.slice(0, 6)}…{address?.slice(-4)}
-      </div>
-      <button
-        type="button"
-        className="btn"
-        onClick={() => disconnect()}
-        style={{ background: "#ff4444", color: "#fff" }}
-      >
-        断开
-      </button>
-    </div>
+    
+      {isPending ? '连接中...' : '未连接钱包'}
+    
   );
 }
