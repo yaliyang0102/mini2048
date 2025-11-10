@@ -1,12 +1,22 @@
-// src/app/page.tsx
+"use client";
+import { useState } from "react";
+import GameBoard from "../components/GameBoard";
+
 export const dynamic = "force-dynamic";
 export const revalidate = 0;
 
 export default function Page() {
+  const [finalScore, setFinalScore] = useState<number | null>(null);
   return (
-    <main style={{padding:24,fontFamily:"ui-sans-serif,system-ui"}}>
-      <h1 style={{fontSize:20,marginBottom:12}}>mini2048 • health check</h1>
-      <p>If you can see this, SSR is OK. We will add wagmi/game after this step.</p>
+    <main className="container">
+      <div className="card">
+        <div className="h1">mini2048</div>
+        <div className="mono">纯前端运行（未接钱包）</div>
+      </div>
+      <GameBoard onGameOver={setFinalScore} />
+      {finalScore !== null && (
+        <div className="card mono">最终得分：{finalScore}</div>
+      )}
     </main>
   );
 }
