@@ -1,26 +1,25 @@
-"use client";
+'use client';
 
-import { ReactNode, useState } from "react";
-import { WagmiProvider, createConfig, http } from "wagmi";
-import { injected } from "@wagmi/connectors";
-import { base } from "wagmi/chains";
-import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
+import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
+import { WagmiProvider } from 'wagmi';
+import { useState } from 'react';
+import { wagmiConfig } from '../wagmi'; // 导入完整配置
 
-const wagmiConfig = createConfig({
-  chains: [base],
-  connectors: [injected({ shimDisconnect: true })],
-  transports: { [base.id]: http() },
-  ssr: false,
-});
-
-export function Providers({ children }: { children: ReactNode }) {
-  const [queryClient] = useState(() => new QueryClient());
+export function Providers({ children }: { children: React.ReactNode }) {
+  const [queryClient] = useState(() => new QueryClient({
+    defaultOptions: {
+      queries: {
+        retry: 3,
+        staleTime: 1000 * 60 * 5, // 5分钟
+      },
+    },
+  }));
 
   return (
-    <WagmiProvider config={wagmiConfig}>
-      <QueryClientProvider client={queryClient}>
+    
+      
         {children}
-      </QueryClientProvider>
-    </WagmiProvider>
+      
+    
   );
 }
