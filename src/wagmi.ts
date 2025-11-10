@@ -2,13 +2,13 @@
 
 import { createConfig, http, cookieStorage, createStorage } from "wagmi";
 import { base } from "wagmi/chains";
-import { farcasterMiniApp } from "@farcaster/miniapp-wagmi-connector"; // ✅ 正确导入名称
+import { farcasterMiniApp } from "@farcaster/miniapp-wagmi-connector"; 
 import { injected } from "wagmi/connectors";
 
 export const wagmiConfig = createConfig({
   chains: [base],
   connectors: [
-    farcasterMiniApp(), // ✅ 使用正确的连接器名称
+    farcasterMiniApp(), 
     injected({ shimDisconnect: true }),
   ],
   transports: {
