@@ -1,41 +1,30 @@
+// src/components/MintButton.tsx
 "use client";
 
 import { ClaimButton } from "thirdweb/react";
 import { base } from "thirdweb/chains";
 import { createThirdwebClient } from "thirdweb";
 
-type Props = { quantity?: number | string };
+const CONTRACT = "0x你的DropERC721合约地址";
 
-const CONTRACT = process.env.NEXT_PUBLIC_ERC721_DROP_ADDRESS as `0x${string}` | undefined;
-const CLIENT_ID = process.env.NEXT_PUBLIC_THIRDWEB_CLIENT_ID;
-const client = CLIENT_ID ? createThirdwebClient({ clientId: CLIENT_ID }) : undefined;
+// 请确保在 Vercel 环境变量里设置 NEXT_PUBLIC_THIRDWEB_CLIENT_ID
+const client = createThirdwebClient({
+  clientId: process.env.NEXT_PUBLIC_THIRDWEB_CLIENT_ID!,
+});
 
-export default function MintButton({ quantity = 1 }: Props) {
-  if (!CLIENT_ID || !CONTRACT || !client) {
-    return (
-      <button
-        className="btn"
-        disabled
-        title="请配置 NEXT_PUBLIC_THIRDWEB_CLIENT_ID 与 NEXT_PUBLIC_ERC721_DROP_ADDRESS"
-        style={{ width: "100%" }}
-      >
-        缺少 thirdweb 配置
-      </button>
-    );
-  }
-
+export default function MintButton({ quantity = 1 }: { quantity?: number }) {
   return (
     <ClaimButton
       client={client}
       chain={base}
       contractAddress={CONTRACT}
-      // 关键：把数量转成字符串以通过类型检查
-      claimParams={{ quantity: String(quantity) }}
+      // ✅ 关键：明确声明这是 ERC721，并把数量转成字符串
+      claimParams={{ type: "ERC721", quantity: String(quantity) }}
       onError={(e) => alert(e?.message ?? "铸造失败")}
       onTransactionConfirmed={() => alert("铸造成功")}
       style={{ width: "100%" }}
     >
-      Mint NFT
+      Mint {quantity}
     </ClaimButton>
   );
 }
