@@ -1,24 +1,13 @@
+// src/app/error.tsx
 "use client";
-
-export default function Error({
-  error,
-  reset,
-}: {
-  error: Error & { digest?: string };
-  reset: () => void;
-}) {
+export default function GlobalError({ error }: { error: Error & { digest?: string } }) {
   return (
-    <div className="container">
-      <div className="card">
-        <div className="h1">页面出错</div>
-        <div className="mono" style={{ whiteSpace: "pre-wrap" }}>
-          {error.message}
-          {error?.digest ? `\n\ndigest: ${error.digest}` : ""}
-        </div>
-        <button className="btn" onClick={() => reset()} style={{ marginTop: 12 }}>
-          重试
-        </button>
-      </div>
-    </div>
+    <html>
+      <body style={{ padding: 24, fontFamily: "monospace" }}>
+        <h2>App Error</h2>
+        <pre>{error.message}</pre>
+        <pre>digest: {error.digest}</pre>
+      </body>
+    </html>
   );
 }
