@@ -2,166 +2,157 @@
 import { useEffect, useRef, useState } from "react";
 
 type Board = number[][];
-const SIZE = 4;
 
-export default function GameBoard({ onGameOver }: { onGameOver: (score: number) => void; }) {
-  const [board, setBoard] = useState<Board>(() => makeEmpty());
+const N = 4;
+
+function fresh(): Board {
+  const b = Array.from({ length: N }, () => Array(N).fill(0));
+  placeRandom(b); placeRandom(b);
+  return b;
+}
+
+function placeRandom(b: Board) {
+  const empty: Array<[number, number]> = [];
+  for (let r = 0; r < N; r++) for (let c = 0; c < N; c++)
+    if (b[r][c] === 0) empty.push([r, c]);
+  if (!empty.length) return;
+  const [r, c] = empty[Math.floor(Math.random() * empty.length)];
+  b[r][c] = Math.random() < 0.9 ? 2 : 4;
+}
+
+function rotate(b: Board): Board {
+  // 旋转 90°（辅助实现上下移动）
+  const out = Array.from({ length: N }, () => Array(N).fill(0));
+  for (let r = 0; r < N; r++) for (let c = 0; c < N; c++)
+    out[c][N - 1 - r] = b[r][c];
+  return out;
+}
+
+function moveLeft(b: Board) {
+  let moved = false, gain = 0;
+  const nb: Board = b.map(row => {
+    const vals = row.filter(v => v !== 0);
+    const merged: number[] = [];
+    for (let i = 0; i < vals.length; i++) {
+      if (i < vals.length - 1 && vals[i] === vals[i + 1]) {
+        const v = vals[i] * 2;
+        merged.push(v);
+        gain += v;
+        i++;
+      } else merged.push(vals[i]);
+    }
+    while (merged.length < N) merged.push(0);
+    if (merged.some((v, i) => v !== row[i])) moved = true;
+    return merged;
+  });
+  return { nb, moved, gain };
+}
+
+export default function GameBoard({
+  onGameOver,
+}: {
+  onGameOver: (score: number) => void;
+}) {
+  const [board, setBoard] = useState<Board>(() => fresh());
   const [score, setScore] = useState(0);
   const [over, setOver] = useState(false);
 
-  const touchStart = useRef<{ x: number; y: number } | null>(null);
+  const swipe = useRef<{ x?: number; y?: number }>({});
 
-  useEffect(() => { init(); }, []);
+  const doMove = (dir: "left" | "right" | "up" | "down") => {
+    if (over) return;
 
+    let working = board;
+    if (dir === "up") working = rotate(rotate(rotate(working)));
+    if (dir === "right") working = working.map(r => [...r].reverse());
+    if (dir === "down") working = rotate(working);
+
+    const { nb, moved, gain } = moveLeft(working);
+
+    let newBoard = nb;
+    if (dir === "up") newBoard = rotate(newBoard);
+    if (dir === "right") newBoard = newBoard.map(r => [...r].reverse());
+    if (dir === "down") newBoard = rotate(rotate(rotate(newBoard)));
+
+    if (moved) {
+      placeRandom(newBoard);
+      const sc = score + gain;
+      setBoard(newBoard);
+      setScore(sc);
+      checkEnd(newBoard, sc);
+    }
+  };
+
+  const checkEnd = (b: Board, sc: number) => {
+    const flat = b.flat();
+    if (flat.includes(2048)) { setOver(true); onGameOver(sc); return; }
+    if (flat.includes(0)) return;
+    // 无空格，检查是否还能合并
+    for (let r = 0; r < N; r++) for (let c = 0; c < N; c++) {
+      if (c < N - 1 && b[r][c] === b[r][c + 1]) return;
+      if (r < N - 1 && b[r][c] === b[r + 1][c]) return;
+    }
+    setOver(true);
+    onGameOver(sc);
+  };
+
+  // 键盘
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
       if (over) return;
-      if (["ArrowLeft","ArrowRight","ArrowUp","ArrowDown"].includes(e.key)) e.preventDefault();
-      if (e.key === "ArrowLeft") step("L");
-      if (e.key === "ArrowRight") step("R");
-      if (e.key === "ArrowUp") step("U");
-      if (e.key === "ArrowDown") step("D");
+      if (["ArrowLeft", "ArrowRight", "ArrowUp", "ArrowDown"].includes(e.key)) e.preventDefault();
+      if (e.key === "ArrowLeft") doMove("left");
+      if (e.key === "ArrowRight") doMove("right");
+      if (e.key === "ArrowUp") doMove("up");
+      if (e.key === "ArrowDown") doMove("down");
     };
-    document.addEventListener("keydown", onKey);
-    return () => document.removeEventListener("keydown", onKey);
-  }, [board, score, over]);
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [board, over, score]);
 
+  // 触控
   const onTouchStart = (e: React.TouchEvent) => {
-    const t = e.touches[0];
-    touchStart.current = { x: t.clientX, y: t.clientY };
+    const t = e.touches[0]; swipe.current = { x: t.clientX, y: t.clientY };
   };
   const onTouchEnd = (e: React.TouchEvent) => {
-    if (!touchStart.current || over) return;
     const t = e.changedTouches[0];
-    const dx = t.clientX - touchStart.current.x;
-    const dy = t.clientY - touchStart.current.y;
-    const ax = Math.abs(dx), ay = Math.abs(dy);
-    if (Math.max(ax, ay) < 24) return;
-    if (ax > ay) step(dx > 0 ? "R" : "L");
-    else step(dy > 0 ? "D" : "U");
-    touchStart.current = null;
+    const dx = (t.clientX - (swipe.current.x ?? t.clientX));
+    const dy = (t.clientY - (swipe.current.y ?? t.clientY));
+    if (Math.abs(dx) < 24 && Math.abs(dy) < 24) return;
+    if (Math.abs(dx) > Math.abs(dy)) doMove(dx > 0 ? "right" : "left");
+    else doMove(dy > 0 ? "down" : "up");
   };
 
-  function init() {
-    const b = makeEmpty();
-    addRandom(b); addRandom(b);
-    setBoard(b);
-    setScore(0);
-    setOver(false);
-  }
-
-  function step(dir: "L"|"R"|"U"|"D") {
-    let b = clone(board);
-    let moved = false;
-    let gained = 0;
-
-    const slideRow = (row: number[]) => {
-      const nonZero = row.filter(v => v !== 0);
-      const merged: number[] = [];
-      for (let i=0; i<nonZero.length; i++) {
-        if (i < nonZero.length - 1 && nonZero[i] === nonZero[i+1]) {
-          const v = nonZero[i]*2;
-          merged.push(v);
-          gained += v;
-          i++; // skip next
-        } else merged.push(nonZero[i]);
-      }
-      while (merged.length < SIZE) merged.push(0);
-      return merged;
-    };
-
-    if (dir === "L") {
-      const nb = b.map(slideRow);
-      moved = !eq(b, nb); b = nb;
-    } else if (dir === "R") {
-      const nb = b.map(r => reverse(slideRow(reverse(r))));
-      moved = !eq(b, nb); b = nb;
-    } else if (dir === "U") {
-      const t = transpose(b);
-      const slid = t.map(slideRow);
-      const nb = transpose(slid);
-      moved = !eq(b, nb); b = nb;
-    } else if (dir === "D") {
-      const t = transpose(b);
-      const slid = t.map(r => reverse(slideRow(reverse(r))));
-      const nb = transpose(slid);
-      moved = !eq(b, nb); b = nb;
-    }
-
-    if (!moved) return;
-    addRandom(b);
-    setBoard(b);
-    setScore(s => s + gained);
-
-    const { isWin, noMove } = status(b);
-    if (isWin || noMove) {
-      setOver(true);
-      onGameOver(score + gained);
-    }
-  }
-
   return (
-    <div className="card" onTouchStart={onTouchStart} onTouchEnd={onTouchEnd}>
-      <div style={{
-        display: "grid",
-        gap: 8,
-        gridTemplateColumns: `repeat(${SIZE}, 1fr)`,
-        width: "100%", aspectRatio: "1 / 1", padding: 8,
-        background:"#0b1424", borderRadius: 16, border: "1px solid #1a2742"
-      }}>
-        {board.flat().map((v, i) => (
-          <div key={i} className="center mono" style={{
-            borderRadius: 12, fontWeight: 700, fontSize: 18,
-            background: getTileColor(v), color: v <= 4 ? "#172033" : "#fff",
-            transition: "all .15s ease", userSelect: "none"
-          }}>
-            {v || ""}
+    <div className="card">
+      <div className="row" style={{justifyContent:"space-between",alignItems:"center"}}>
+        <div className="h1">2048</div>
+        <div className="mono">Score: {score}</div>
+      </div>
+      <div
+        className="board"
+        onTouchStart={onTouchStart}
+        onTouchEnd={onTouchEnd}
+        role="grid"
+        aria-label="2048 board"
+      >
+        {board.map((row, r) => (
+          <div key={r} className="row">
+            {row.map((v, c) => (
+              <div key={r + "-" + c} className={`tile v${v || "0"}`}>
+                {v || ""}
+              </div>
+            ))}
           </div>
         ))}
       </div>
-
-      <div style={{ display:"flex", gap: 8, marginTop: 12 }}>
-        <div className="btn" onClick={init}>重新开始</div>
-        <div className="btn" style={{ opacity:.8, cursor: "default" }}>分数：{score}</div>
-      </div>
-    </div>
-  );
-}
-
-function makeEmpty(): Board { return Array.from({ length: SIZE }, () => Array(SIZE).fill(0)); }
-function clone(b: Board): Board { return b.map(r => r.slice()); }
-function reverse<T>(arr: T[]): T[] { return arr.slice().reverse(); }
-function transpose(b: Board): Board {
-  const t = makeEmpty();
-  for (let r=0;r<SIZE;r++) for (let c=0;c<SIZE;c++) t[c][r]=b[r][c];
-  return t;
-}
-function eq(a: Board, b: Board) { return a.flat().toString() === b.flat().toString(); }
-function addRandom(b: Board) {
-  const empty: {r:number;c:number}[] = [];
-  for (let r=0;r<SIZE;r++) for(let c=0;c<SIZE;c++) if (b[r][c]===0) empty.push({r,c});
-  if (!empty.length) return;
-  const { r, c } = empty[Math.floor(Math.random()*empty.length)];
-  b[r][c] = Math.random() < 0.9 ? 2 : 4;
-}
-function status(b: Board) {
-  const flat = b.flat();
-  const isWin = flat.includes(2048);
-  const hasZero = flat.includes(0);
-  let canMerge = false;
-  for (let r=0;r<SIZE;r++) for (let c=0;c<SIZE;c++){
-    if (c+1<SIZE && b[r][c]===b[r][c+1]) canMerge = true;
-    if (r+1<SIZE && b[r][c]===b[r+1][c]) canMerge = true;
-  }
-  const noMove = !hasZero && !canMerge;
-  return { isWin, noMove };
-}
-
-function getTileColor(v: number): string {
-  const map: Record<number, string> = {
-    0:"#0f1a2e", 2:"#1a2742", 4:"#223152", 8:"#2b3b62", 16:"#355274",
-    32:"#406a87", 64:"#4a829a", 128:"#559aaf", 256:"#61b3c4",
-    512:"#6bcbda", 1024:"#75e3ef", 2048:"#7bffff"
-  };
-  return map[v] ?? "#1a2742";
-}
+      {over && <div className="mono" style={{marginTop:8}}>游戏结束。再按任意方向开始新盘。</div>}
+      {over && (
+        <button
+          className="btn"
+          onClick={() => { setBoard(fresh()); setScore(0); setOver(false); }}
+          style={{marginTop:8}}
+        >
+          再来一局
+        </button>
+      )}
