@@ -1,15 +1,14 @@
 "use client";
 
 import { ReactNode, useState } from "react";
-import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-
-// 只用 injected，避免引入 MetaMask SDK / WalletConnect 造成构建警告
 import { WagmiProvider, createConfig, http } from "wagmi";
 import { injected } from "@wagmi/connectors";
 import { base } from "wagmi/chains";
+import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 
-// thirdweb（给 ClaimButton 用）
-import { ThirdwebProvider, createThirdwebClient } from "thirdweb";
+// thirdweb v5：Provider 从 "thirdweb/react" 导入；client 从 "thirdweb" 导入
+import { ThirdwebProvider } from "thirdweb/react";
+import { createThirdwebClient } from "thirdweb";
 import { base as thirdwebBase } from "thirdweb/chains";
 
 const wagmiConfig = createConfig({
@@ -19,7 +18,7 @@ const wagmiConfig = createConfig({
 });
 
 const thirdwebClient = createThirdwebClient({
-  // 确保在 Vercel 上配置 NEXT_PUBLIC_THIRDWEB_CLIENT_ID
+  // 记得在 Vercel 环境变量里配置 NEXT_PUBLIC_THIRDWEB_CLIENT_ID
   clientId: process.env.NEXT_PUBLIC_THIRDWEB_CLIENT_ID ?? "demo",
 });
 
