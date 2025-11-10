@@ -1,22 +1,16 @@
-"use client";
-import { useState } from "react";
+// src/app/page.tsx
+export const dynamic = "force-dynamic"; // 强制动态渲染（避免静态预渲染）
+export const revalidate = 0;            // ✅ 正确：数字 0，而不是对象
+
 import GameBoard from "../components/GameBoard";
 
-export const dynamic = "force-dynamic";
-export const revalidate = 0;
-
 export default function Page() {
-  const [finalScore, setFinalScore] = useState<number | null>(null);
   return (
     <main className="container">
       <div className="card">
-        <div className="h1">mini2048</div>
-        <div className="mono">纯前端运行（未接钱包）</div>
+        <div className="h1">mini2048 • game</div>
+        <GameBoard onGameOver={(s) => console.log("score:", s)} />
       </div>
-      <GameBoard onGameOver={setFinalScore} />
-      {finalScore !== null && (
-        <div className="card mono">最终得分：{finalScore}</div>
-      )}
     </main>
   );
 }
