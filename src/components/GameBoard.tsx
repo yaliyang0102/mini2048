@@ -1,237 +1,246 @@
-'use client';
+"use client";
 
-import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from "react";
+import MintButton from "./MintButton";
 
-type Board = number[][];
-type Dir = 'up' | 'down' | 'left' | 'right';
-
+type Grid = number[][];
 const SIZE = 4;
-const WIN = 2048;
 
-// ---- 工具函数 ----
-const clone = (b: Board): Board => b.map((r) => r.slice());
-const emptyBoard = (): Board => Array.from({ length: SIZE }, () => Array(SIZE).fill(0));
+// ------ 工具函数 ------
+const clone = (g: Grid) => g.map((r) => [...r]);
+const emptyCells = (g: Grid) => {
+  const cells: Array<[number, number]> = [];
+  g.forEach((row, i) =>
+    row.forEach((v, j) => {
+      if (v === 0) cells.push([i, j]);
+    })
+  );
+  return cells;
+};
+const randChoice = <T,>(arr: T[]) => arr[Math.floor(Math.random() * arr.length)];
+const addRandomTile = (g: Grid) => {
+  const cells = emptyCells(g);
+  if (!cells.length) return g;
+  const [i, j] = randChoice(cells);
+  g[i][j] = Math.random() < 0.9 ? 2 : 4;
+  return g;
+};
+const newGrid = (): Grid => addRandomTile(addRandomTile(Array.from({ length: SIZE }, () => Array(SIZE).fill(0))));
 
-function randomEmptyCell(b: Board): [number, number] | null {
-  const empties: [number, number][] = [];
-  for (let i = 0; i < SIZE; i++) {
-    for (let j = 0; j < SIZE; j++) if (b[i][j] === 0) empties.push([i, j]);
-  }
-  if (!empties.length) return null;
-  return empties[Math.floor(Math.random() * empties.length)];
-}
+const compress = (row: number[]) => row.filter((x) => x !== 0);
+const padRight = (row: number[]) => [...row, ...Array(SIZE - row.length).fill(0)];
+const padLeft = (row: number[]) => [...Array(SIZE - row.length).fill(0), ...row];
 
-function addRandomTile(b: Board): Board {
-  const cell = randomEmptyCell(b);
-  if (!cell) return b;
-  const [i, j] = cell;
-  const val = Math.random() < 0.9 ? 2 : 4;
-  const nb = clone(b);
-  nb[i][j] = val;
-  return nb;
-}
-
-function compressRow(row: number[]): number[] {
-  const nums = row.filter((x) => x !== 0);
-  while (nums.length < SIZE) nums.push(0);
-  return nums;
-}
-
-function mergeRow(row: number[]): { row: number[]; gained: number } {
-  const r = row.slice();
-  let gained = 0;
-  for (let i = 0; i < SIZE - 1; i++) {
-    if (r[i] !== 0 && r[i] === r[i + 1]) {
-      r[i] *= 2;
-      gained += r[i];
-      r[i + 1] = 0;
-      i++;
+function moveLeft(grid: Grid) {
+  let scoreAdd = 0;
+  const next = grid.map((row) => {
+    const line = compress(row);
+    const merged: number[] = [];
+    for (let i = 0; i < line.length; i++) {
+      if (line[i] === line[i + 1]) {
+        const v = line[i] * 2;
+        merged.push(v);
+        scoreAdd += v;
+        i++;
+      } else merged.push(line[i]);
     }
-  }
-  return { row: compressRow(r), gained };
-}
-
-function rotateRight(b: Board): Board {
-  const res = emptyBoard();
-  for (let i = 0; i < SIZE; i++) for (let j = 0; j < SIZE; j++) res[j][SIZE - 1 - i] = b[i][j];
-  return res;
-}
-
-function rotateLeft(b: Board): Board {
-  const res = emptyBoard();
-  for (let i = 0; i < SIZE; i++) for (let j = 0; j < SIZE; j++) res[SIZE - 1 - j][i] = b[i][j];
-  return res;
-}
-
-function flipRow(row: number[]): number[] {
-  return row.slice().reverse();
-}
-
-function boardsEqual(a: Board, b: Board) {
-  for (let i = 0; i < SIZE; i++) for (let j = 0; j < SIZE; j++) if (a[i][j] !== b[i][j]) return false;
-  return true;
-}
-
-function anyMoves(b: Board) {
-  // 有空位或可合并即还有路
-  for (let i = 0; i < SIZE; i++) for (let j = 0; j < SIZE; j++) {
-    if (b[i][j] === 0) return true;
-    if (i < SIZE - 1 && b[i][j] === b[i + 1][j]) return true;
-    if (j < SIZE - 1 && b[i][j] === b[i][j + 1]) return true;
-  }
-  return false;
-}
-
-// ---- 组件 ----
-export default function GameBoard() {
-  const containerRef = useRef<HTMLDivElement>(null);
-  const [board, setBoard] = useState<Board>(() => {
-    // 初始放两块
-    let b = emptyBoard();
-    b = addRandomTile(addRandomTile(b));
-    return b;
+    return padRight(merged);
   });
+  return { next, scoreAdd };
+}
+
+function reverseRows(g: Grid) {
+  return g.map((r) => [...r].reverse());
+}
+function transpose(g: Grid) {
+  const t: Grid = Array.from({ length: SIZE }, () => Array(SIZE).fill(0));
+  for (let i = 0; i < SIZE; i++) for (let j = 0; j < SIZE; j++) t[i][j] = g[j][i];
+  return t;
+}
+
+const equalGrid = (a: Grid, b: Grid) =>
+  a.every((row, i) => row.every((v, j) => v === b[i][j]));
+
+const hasMove = (g: Grid) => {
+  // 仍有空
+  if (emptyCells(g).length) return true;
+  // 横向可合并
+  for (let i = 0; i < SIZE; i++)
+    for (let j = 0; j < SIZE - 1; j++)
+      if (g[i][j] === g[i][j + 1]) return true;
+  // 纵向可合并
+  for (let j = 0; j < SIZE; j++)
+    for (let i = 0; i < SIZE - 1; i++)
+      if (g[i][j] === g[i + 1][j]) return true;
+  return false;
+};
+
+// ------ 组件 ------
+export default function GameBoard({ onGameOver }: { onGameOver?: (score: number) => void }) {
+  const [grid, setGrid] = useState<Grid>(() => newGrid());
   const [score, setScore] = useState(0);
   const [best, setBest] = useState(0);
-  const [over, setOver] = useState(false);
+  const [movedFlag, setMovedFlag] = useState(false);
 
-  // 读取/记录最高分
+  const threshold = 128; // 达到阈值显示 Mint（可自行改成更高）
+  const containerRef = useRef<HTMLDivElement>(null);
+  const touch = useRef<{ x: number; y: number } | null>(null);
+
   useEffect(() => {
-    const saved = Number(localStorage.getItem('best-2048') || 0);
-    setBest(saved);
+    // 恢复最高分
+    try {
+      const b = localStorage.getItem("best-score");
+      if (b) setBest(parseInt(b));
+    } catch {}
   }, []);
+
   useEffect(() => {
+    // 保存最高分
     if (score > best) {
       setBest(score);
-      localStorage.setItem('best-2048', String(score));
+      try {
+        localStorage.setItem("best-score", String(score));
+      } catch {}
     }
   }, [score, best]);
 
-  const didWin = useMemo(() => board.some(row => row.some(v => v >= WIN)), [board]);
-
-  const restart = useCallback(() => {
-    let b = emptyBoard();
-    b = addRandomTile(addRandomTile(b));
-    setBoard(b);
-    setScore(0);
-    setOver(false);
-  }, []);
-
-  // 核心移动：统一转化为“向左移动”来处理
-  const moveLeftOnce = useCallback((b: Board) => {
-    let gained = 0;
-    const nb = b.map((row) => {
-      const compressed = compressRow(row);
-      const { row: merged, gained: g } = mergeRow(compressed);
-      gained += g;
-      return merged;
-    });
-    return { nb, gained };
-  }, []);
-
-  const move = useCallback((dir: Dir) => {
-    if (over) return;
-
-    let working = board;
-    if (dir === 'up') working = rotateLeft(working);
-    if (dir === 'down') working = rotateRight(working);
-    if (dir === 'right') working = working.map((r) => flipRow(r));
-
-    const { nb, gained } = moveLeftOnce(working);
-
-    let restored = nb;
-    if (dir === 'up') restored = rotateRight(restored);
-    if (dir === 'down') restored = rotateLeft(restored);
-    if (dir === 'right') restored = restored.map((r) => flipRow(r));
-
-    if (!boardsEqual(board, restored)) {
-      let withNew = addRandomTile(restored);
-      setBoard(withNew);
-      if (gained) setScore((s) => s + gained);
-      if (!anyMoves(withNew)) setOver(true);
-    }
-  }, [board, moveLeftOnce, over]);
-
-  // ---- 键盘 ----
+  // 键盘
   useEffect(() => {
-    // 让容器可聚焦并自动聚焦，确保 onKeyDown 能触发
-    containerRef.current?.focus();
-
     const onKey = (e: KeyboardEvent) => {
-      const k = e.key;
-      if (k.startsWith('Arrow')) {
+      let dir: "left" | "right" | "up" | "down" | null = null;
+      if (e.key === "ArrowLeft" || e.key === "a") dir = "left";
+      if (e.key === "ArrowRight" || e.key === "d") dir = "right";
+      if (e.key === "ArrowUp" || e.key === "w") dir = "up";
+      if (e.key === "ArrowDown" || e.key === "s") dir = "down";
+      if (dir) {
         e.preventDefault();
-        if (k === 'ArrowUp') move('up');
-        else if (k === 'ArrowDown') move('down');
-        else if (k === 'ArrowLeft') move('left');
-        else if (k === 'ArrowRight') move('right');
-      } else if (k === 'w' || k === 'W') move('up');
-      else if (k === 's' || k === 'S') move('down');
-      else if (k === 'a' || k === 'A') move('left');
-      else if (k === 'd' || k === 'D') move('right');
+        move(dir);
+      }
+    };
+    window.addEventListener("keydown", onKey, { passive: false });
+    return () => window.removeEventListener("keydown", onKey);
+  }, [grid, score]);
+
+  // 触控
+  useEffect(() => {
+    const el = containerRef.current;
+    if (!el) return;
+
+    const start = (e: TouchEvent) => {
+      const t = e.touches[0];
+      touch.current = { x: t.clientX, y: t.clientY };
+    };
+    const end = (e: TouchEvent) => {
+      if (!touch.current) return;
+      const t = e.changedTouches[0];
+      const dx = t.clientX - touch.current.x;
+      const dy = t.clientY - touch.current.y;
+      const ax = Math.abs(dx);
+      const ay = Math.abs(dy);
+      if (Math.max(ax, ay) < 20) return; // 忽略轻微滑动
+      if (ax > ay) move(dx > 0 ? "right" : "left");
+      else move(dy > 0 ? "down" : "up");
+      touch.current = null;
     };
 
-    // 用 window 兜底 + passive: false 保证 preventDefault 生效
-    window.addEventListener('keydown', onKey, { passive: false });
-    return () => window.removeEventListener('keydown', onKey as any);
-  }, [move]);
+    el.addEventListener("touchstart", start, { passive: true });
+    el.addEventListener("touchend", end, { passive: true });
+    return () => {
+      el.removeEventListener("touchstart", start);
+      el.removeEventListener("touchend", end);
+    };
+  }, [grid, score]);
 
-  // ---- 触摸（手机滑动）----
-  const startXY = useRef<{ x: number; y: number } | null>(null);
+  // 合并/移动
+  const move = (dir: "left" | "right" | "up" | "down") => {
+    let base = clone(grid);
+    let rotated = base;
 
-  const onTouchStart: React.TouchEventHandler<HTMLDivElement> = (e) => {
-    const t = e.touches[0];
-    startXY.current = { x: t.clientX, y: t.clientY };
+    if (dir === "right") rotated = reverseRows(base);
+    if (dir === "up") rotated = transpose(base);
+    if (dir === "down") rotated = reverseRows(transpose(base));
+
+    const { next, scoreAdd } = moveLeft(rotated);
+
+    let restored = next;
+    if (dir === "right") restored = reverseRows(next);
+    if (dir === "up") restored = transpose(next);
+    if (dir === "down") restored = transpose(reverseRows(next));
+
+    if (!equalGrid(restored, grid)) {
+      // 成功移动
+      const withNew = addRandomTile(restored);
+      setGrid(withNew);
+      setScore((s) => s + scoreAdd);
+      setMovedFlag(true);
+
+      // 检查是否结束
+      if (!hasMove(withNew)) {
+        onGameOver?.(score + scoreAdd);
+        setTimeout(() => alert(`Game Over! 得分 ${score + scoreAdd}`), 10);
+      }
+    } else {
+      setMovedFlag(false);
+    }
   };
 
-  const onTouchEnd: React.TouchEventHandler<HTMLDivElement> = (e) => {
-    if (!startXY.current) return;
-    const t = e.changedTouches[0];
-    const dx = t.clientX - startXY.current.x;
-    const dy = t.clientY - startXY.current.y;
-    startXY.current = null;
-
-    const ax = Math.abs(dx), ay = Math.abs(dy);
-    const TH = 24; // 最小滑动阈值
-    if (Math.max(ax, ay) < TH) return;
-
-    if (ax > ay) move(dx > 0 ? 'right' : 'left');
-    else move(dy > 0 ? 'down' : 'up');
+  const reset = () => {
+    setGrid(newGrid());
+    setScore(0);
   };
 
-  // ---- UI ----
+  // 渲染 tile
+  const tiles = useMemo(
+    () =>
+      grid.flatMap((row, i) =>
+        row.map((v, j) => (
+          <div
+            key={`${i}-${j}-${v}-${movedFlag ? "m" : "s"}`}
+            className={`tile tile-${v || "empty"}`}
+          >
+            {v || ""}
+          </div>
+        ))
+      ),
+    [grid, movedFlag]
+  );
+
   return (
-    <div className="card" style={{ touchAction: 'none' }}>
-      <div className="row" style={{ justifyContent: 'space-between', alignItems: 'center' }}>
+    <div ref={containerRef} className="card">
+      {/* 顶部栏 */}
+      <div className="row" style={{ justifyContent: "space-between", alignItems: "center" }}>
         <div className="h1">2048</div>
-        <div className="mono">Score: {score} &nbsp;&nbsp; Best: {best}</div>
+        <div className="mono">Score: {score} &nbsp; Best: {best}</div>
       </div>
 
-      <div
-        ref={containerRef}
-        tabIndex={0}
-        onTouchStart={onTouchStart}
-        onTouchEnd={onTouchEnd}
-        className="grid"
-        aria-label="2048 board"
-        role="application"
-        style={{ outline: 'none' }}
-      >
-        {board.map((row, i) =>
-          row.map((v, j) => (
-            <div key={`${i}-${j}`} className={`cell tile tile-${v || '0'}`}>
-              {v !== 0 ? v : ''}
-            </div>
-          ))
+      {/* 棋盘 */}
+      <div className="board">{tiles}</div>
+
+      {/* 说明 */}
+      <div className="row" style={{ marginTop: 8, gap: 8 }}>
+        <div className="mono" style={{ opacity: 0.8 }}>
+          使用方向键或滑动操作；相同数字合并，冲击 2048！
+        </div>
+      </div>
+
+      {/* Mint 区域：未达标显示禁用按钮，达标显示真 Mint */}
+      <div className="row" style={{ gap: 10, marginTop: 12 }}>
+        {score >= threshold ? (
+          <MintButton quantity={1} />
+        ) : (
+          <button
+            className="btn"
+            disabled
+            title={`达到 ${threshold} 分解锁 Mint`}
+            style={{ flex: 1 }}
+          >
+            Mint（需 {threshold} 分）
+          </button>
         )}
-      </div>
 
-      <div className="row" style={{ gap: 8, marginTop: 12 }}>
-        <button className="btn" onClick={restart}>重新开始</button>
-        <span className="mono" aria-live="polite">
-          {over ? '没有可走的路啦～' : '使用方向键或滑动操作；相同数字合并，冲击 2048！'}
-          {didWin ? ' 已达成 2048！继续挑战更高分！' : ''}
-        </span>
+        <button className="btn" onClick={reset} style={{ flex: 1 }}>
+          重新开始
+        </button>
       </div>
     </div>
   );
