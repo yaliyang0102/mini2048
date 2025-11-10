@@ -1,5 +1,4 @@
 "use client";
-import { useState } from "react";
 import { useAccount, useWriteContract, useWaitForTransactionReceipt } from "wagmi";
 import { parseEther, zeroAddress } from "viem";
 
@@ -21,9 +20,9 @@ const abi = [
 
 export default function MintButton({ enabled }: { enabled: boolean }) {
   const { address, isConnected } = useAccount();
-  const [hash, setHash] = useState<`0x${string}` | undefined>();
 
-  const { writeContract, isPending } = useWriteContract();
+  // ✅ 用 writeContractAsync（返回交易 hash）
+  const { data: hash, isPending, writeContractAsync } = useWriteContract();
   const { isLoading: confirming, isSuccess } = useWaitForTransactionReceipt({ hash });
 
   const disabled =
@@ -32,14 +31,14 @@ export default function MintButton({ enabled }: { enabled: boolean }) {
   const click = async () => {
     if (disabled) return;
     try {
-      const h = await writeContract({
+      await writeContractAsync({
         address: CONTRACT,
         abi,
         functionName: "claim",
-        args: [address!, 1n, zeroAddress, parseEther("0.0001"), [], 1n],
+        args: [address, 1n, zeroAddress, parseEther("0.0001"), [], 1n],
         value: parseEther("0.0001"),
       });
-      setHash(h);
+      // 交易发出后，hash 会自动进入 data -> useWaitForTransactionReceipt 跟踪确认
     } catch (e) {
       console.error(e);
       alert("铸造失败，请重试");
