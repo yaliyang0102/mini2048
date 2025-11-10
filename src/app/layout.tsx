@@ -1,19 +1,17 @@
 // src/app/layout.tsx
 import './globals.css';
-import type { ReactNode } from 'react';
+import type { Metadata } from 'next';
 
-export const metadata = {
+export const metadata: Metadata = {
   title: 'mini2048',
-  description: 'A tiny 2048 + mint demo',
+  description: 'A tiny 2048 with mint hook',
 };
 
-export const viewport = { width: 'device-width', initialScale: 1 };
-
-export default function RootLayout({ children }: { children: ReactNode }) {
+export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
     <html lang="zh-CN">
       <body>
-        <div className="app">{children}</div>
+        <main className="app">{children}</main>
       </body>
     </html>
   );
