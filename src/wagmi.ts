@@ -2,19 +2,19 @@
 
 import { createConfig, http, cookieStorage, createStorage } from "wagmi";
 import { base } from "wagmi/chains";
-import { miniAppConnector } from "@farcaster/miniapp-wagmi-connector";
+import { farcasterMiniApp } from "@farcaster/miniapp-wagmi-connector"; // ✅ 正确导入名称
 import { injected } from "wagmi/connectors";
 
 export const wagmiConfig = createConfig({
   chains: [base],
   connectors: [
-    miniAppConnector(), // Farcaster内置钱包
-    injected({ shimDisconnect: true }), // 浏览器钱包备用
+    farcasterMiniApp(), // ✅ 使用正确的连接器名称
+    injected({ shimDisconnect: true }),
   ],
   transports: {
     [base.id]: http()
   },
-  ssr: false, // 避免SSR问题
+  ssr: true, // 启用SSR支持
   storage: createStorage({
     storage: cookieStorage
   }),
