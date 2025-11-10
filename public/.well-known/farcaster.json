@@ -1,0 +1,9 @@
+{
+  "name": "mini 2048",
+  "description": "Play 2048 and mint NFTs",
+  "iconUrl": "/icon.png",
+  "splashImageUrl": "/splash.png",
+  "developer": { "name": "Ice Brain Studio" },
+  "version": "1.0.0",
+  "permissions": ["wallet", "sign"]
+}
