@@ -4,11 +4,23 @@ import { useEffect, useRef, useState } from "react";
 import MintButton from "./MintButton";
 
 type Board = number[][];
-
 const SIZE = 4;
 const SWIPE_THRESHOLD = 24; // px
 
-export default function GameBoard() {
+interface Props {
+  /** 游戏结束时回调（传入最终分数） */
+  onGameOver?: (finalScore: number) => void;
+  /** 分数变化时回调 */
+  onScoreChange?: (score: number) => void;
+  /** 解锁 Mint 的阈值（默认 2048） */
+  threshold?: number;
+}
+
+export default function GameBoard({
+  onGameOver,
+  onScoreChange,
+  threshold = 2048,
+}: Props) {
   const [board, setBoard] = useState<Board>(() => makeEmptyBoard());
   const [score, setScore] = useState(0);
   const [best, setBest] = useState(0);
@@ -40,9 +52,10 @@ export default function GameBoard() {
 
     const b = Number(safeGetLocal("mini2048-best") ?? "0") || 0;
     setBest(b);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  // 持久化
+  // 持久化 + 分数变化回调
   useEffect(() => {
     safeSetLocal(
       "mini2048-state",
@@ -52,7 +65,13 @@ export default function GameBoard() {
       setBest(score);
       safeSetLocal("mini2048-best", String(score));
     }
-  }, [board, score, gameOver]);
+    onScoreChange?.(score);
+  }, [board, score, gameOver, best, onScoreChange]);
+
+  // 游戏结束回调
+  useEffect(() => {
+    if (gameOver) onGameOver?.(score);
+  }, [gameOver, score, onGameOver]);
 
   // 键盘
   useEffect(() => {
@@ -68,7 +87,7 @@ export default function GameBoard() {
     };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
-  }, [board, score, gameOver]);
+  }, [gameOver]);
 
   // 触控
   const onTouchStart = (e: React.TouchEvent) => {
@@ -85,11 +104,9 @@ export default function GameBoard() {
       return;
     }
     if (Math.abs(dx) > Math.abs(dy)) {
-      // horizontal
       if (dx > 0) move("R");
       else move("L");
     } else {
-      // vertical
       if (dy > 0) move("D");
       else move("U");
     }
@@ -171,13 +188,13 @@ export default function GameBoard() {
         <button className="btn" onClick={initGame}>
           重新开始
         </button>
-        {score >= 2048 ? (
+        {score >= threshold ? (
           <div style={{ flex: 1 }}>
             <MintButton quantity={1} />
           </div>
         ) : (
-          <button className="btn" disabled title="达到 2048 分解锁 Mint" style={{ flex: 1 }}>
-            分数达到 2048 解锁 Mint
+          <button className="btn" disabled title={`达到 ${threshold} 分解锁 Mint`} style={{ flex: 1 }}>
+            分数达到 {threshold} 解锁 Mint
           </button>
         )}
       </div>
@@ -199,7 +216,7 @@ export default function GameBoard() {
       )}
 
       <p className="muted" style={{ marginTop: 12 }}>
-        使用方向键或滑动操作；相同数字合并，冲击 2048！
+        使用方向键或滑动操作；相同数字合并，冲击 {threshold}！
       </p>
     </div>
   );
@@ -210,11 +227,9 @@ export default function GameBoard() {
 function makeEmptyBoard(): Board {
   return Array.from({ length: SIZE }, () => Array(SIZE).fill(0));
 }
-
 function clone(b: Board): Board {
   return b.map((row) => row.slice());
 }
-
 function boardsEqual(a: Board, b: Board) {
   for (let r = 0; r < SIZE; r++) {
     for (let c = 0; c < SIZE; c++) {
@@ -223,7 +238,6 @@ function boardsEqual(a: Board, b: Board) {
   }
   return true;
 }
-
 function addRandomTile(b: Board) {
   const empties: Array<{ r: number; c: number }> = [];
   for (let r = 0; r < SIZE; r++) {
@@ -235,9 +249,7 @@ function addRandomTile(b: Board) {
   const { r, c } = empties[Math.floor(Math.random() * empties.length)];
   b[r][c] = Math.random() < 0.9 ? 2 : 4;
 }
-
 function compressAndMergeRow(row: number[]) {
-  // 去零
   const filtered = row.filter((x) => x !== 0);
   const merged: number[] = [];
   let gained = 0;
@@ -246,7 +258,7 @@ function compressAndMergeRow(row: number[]) {
       const v = filtered[i] * 2;
       merged.push(v);
       gained += v;
-      i++; // skip next
+      i++;
     } else {
       merged.push(filtered[i]);
     }
@@ -254,7 +266,6 @@ function compressAndMergeRow(row: number[]) {
   while (merged.length < SIZE) merged.push(0);
   return { row: merged, gained };
 }
-
 function transpose(b: Board): Board {
   const t = makeEmptyBoard();
   for (let r = 0; r < SIZE; r++) {
@@ -264,7 +275,6 @@ function transpose(b: Board): Board {
   }
   return t;
 }
-
 function moveLeft(b: Board) {
   const out = makeEmptyBoard();
   let gained = 0;
@@ -275,7 +285,6 @@ function moveLeft(b: Board) {
   }
   return { board: out, gained };
 }
-
 function moveRight(b: Board) {
   const out = makeEmptyBoard();
   let gained = 0;
@@ -287,27 +296,22 @@ function moveRight(b: Board) {
   }
   return { board: out, gained };
 }
-
 function moveUp(b: Board) {
   const t = transpose(b);
   const { board: moved, gained } = moveLeft(t);
   return { board: transpose(moved), gained };
 }
-
 function moveDown(b: Board) {
   const t = transpose(b);
   const { board: moved, gained } = moveRight(t);
   return { board: transpose(moved), gained };
 }
-
 function isGameOver(b: Board) {
-  // 空位
   for (let r = 0; r < SIZE; r++) {
     for (let c = 0; c < SIZE; c++) {
       if (b[r][c] === 0) return false;
     }
   }
-  // 相邻可合并
   for (let r = 0; r < SIZE; r++) {
     for (let c = 0; c < SIZE; c++) {
       const v = b[r][c];
@@ -317,7 +321,6 @@ function isGameOver(b: Board) {
   }
   return true;
 }
-
 function tileColor(v: number) {
   const map: Record<number, string> = {
     0: "rgba(255,255,255,0.06)",
@@ -339,7 +342,6 @@ function tileColor(v: number) {
 }
 
 /* ---------------------------- 小工具 ---------------------------- */
-
 function safeGetLocal(key: string) {
   try {
     if (typeof window === "undefined") return null;
