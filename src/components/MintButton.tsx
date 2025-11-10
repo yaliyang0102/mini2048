@@ -36,8 +36,8 @@ export default function MintButton({ enabled }: { enabled: boolean }) {
         address: CONTRACT,
         abi,
         functionName: "claim",
-        args: [address!, 1n, zeroAddress, parseEther("0.001"), [], 1n],
-        value: parseEther("0.001"),
+        args: [address!, 1n, zeroAddress, parseEther("0.0001"), [], 1n],
+        value: parseEther("0.0001"),
       });
       setHash(h);
     } catch (e) {
@@ -48,7 +48,7 @@ export default function MintButton({ enabled }: { enabled: boolean }) {
 
   return (
     <button className="btn" disabled={disabled} onClick={click}>
-      {isSuccess ? "已铸造 ✅" : confirming ? "确认中…" : isPending ? "提交中…" : "铸造 NFT（0.001 ETH）"}
+      {isSuccess ? "已铸造 ✅" : confirming ? "确认中…" : isPending ? "提交中…" : "铸造 NFT（0.0001 ETH）"}
     </button>
   );
 }
