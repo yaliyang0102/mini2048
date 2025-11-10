@@ -1,53 +1,37 @@
 "use client";
-import { useAccount, useWriteContract, useWaitForTransactionReceipt } from "wagmi";
-import { parseEther, zeroAddress } from "viem";
 
-const CONTRACT = process.env.NEXT_PUBLIC_CONTRACT_ADDRESS as `0x${string}`;
+import { ClaimButton } from "thirdweb/react";
+import { getContract } from "thirdweb";
+import { base } from "thirdweb/chains";
+import { thirdwebClient } from "../app/thirdweb";
 
-const abi = [
-  {
-    "inputs":[
-      {"internalType":"address","name":"_receiver","type":"address"},
-      {"internalType":"uint256","name":"_quantity","type":"uint256"},
-      {"internalType":"address","name":"_currency","type":"address"},
-      {"internalType":"uint256","name":"_pricePerToken","type":"uint256"},
-      {"internalType":"bytes32[]","name":"_allowlistProof","type":"bytes32[]"},
-      {"internalType":"uint256","name":"_proofMaxQuantityPerTransaction","type":"uint256"}
-    ],
-    "name":"claim","outputs":[],"stateMutability":"payable","type":"function"
+const address = process.env.NEXT_PUBLIC_NFT_CONTRACT as `0x${string}` | undefined;
+
+export default function MintButton({ quantity = 1 }: { quantity?: number }) {
+  if (!address) {
+    return (
+      <button disabled className="btn" title="缺少 NEXT_PUBLIC_NFT_CONTRACT">
+        合约未配置
+      </button>
+    );
   }
-] as const;
 
-export default function MintButton({ enabled }: { enabled: boolean }) {
-  const { address, isConnected } = useAccount();
-
-  // ✅ 用 writeContractAsync（返回交易 hash）
-  const { data: hash, isPending, writeContractAsync } = useWriteContract();
-  const { isLoading: confirming, isSuccess } = useWaitForTransactionReceipt({ hash });
-
-  const disabled =
-    !enabled || !isConnected || !address || !CONTRACT || isPending || confirming;
-
-  const click = async () => {
-    if (disabled) return;
-    try {
-      await writeContractAsync({
-        address: CONTRACT,
-        abi,
-        functionName: "claim",
-        args: [address, 1n, zeroAddress, parseEther("0.0001"), [], 1n],
-        value: parseEther("0.0001"),
-      });
-      // 交易发出后，hash 会自动进入 data -> useWaitForTransactionReceipt 跟踪确认
-    } catch (e) {
-      console.error(e);
-      alert("铸造失败，请重试");
-    }
-  };
+  const contract = getContract({
+    client: thirdwebClient,
+    address,
+    chain: base,
+  });
 
   return (
-    <button className="btn" disabled={disabled} onClick={click}>
-      {isSuccess ? "已铸造 ✅" : confirming ? "确认中…" : isPending ? "提交中…" : "铸造 NFT（0.0001 ETH）"}
-    </button>
+    <ClaimButton
+      contract={contract}
+      quantity={quantity}
+      // 你已经在 thirdweb Dashboard 设置好价格 0.0001 / 总量 9999，无需在前端再写死
+      onError={(e) => alert(e?.message ?? "铸造失败")}
+      onTransactionConfirmed={() => alert("Mint 成功！")}
+      style={{ width: "100%" }}
+    >
+      Mint 2048 NFT
+    </ClaimButton>
   );
 }
