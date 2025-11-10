@@ -6,9 +6,9 @@ import { farcasterMiniApp as miniAppConnector } from "@farcaster/miniapp-wagmi-c
 export const wagmiConfig = createConfig({
   chains: [base],
   transports: { [base.id]: http() },
-  ssr: false, // 关键：仅在客户端使用 wagmi，避免服务器端因 storage/cookies 崩溃
+  ssr: false, // 关键：仅客户端使用 wagmi
   connectors: [
-    miniAppConnector(),
-    injected({ shimDisconnect: true }),
+    miniAppConnector(),             // Farcaster 内置钱包（Warpcast 内）
+    injected({ shimDisconnect: true }) // 浏览器钱包
   ],
 });
