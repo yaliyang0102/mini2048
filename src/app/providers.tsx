@@ -1,25 +1,33 @@
-'use client';
+"use client";
 
-import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
-import { WagmiProvider } from 'wagmi';
-import { useState } from 'react';
-import { wagmiConfig } from '../wagmi'; // 导入完整配置
+import { ReactNode, useState } from "react";
+import { WagmiProvider, createConfig, http } from "wagmi";
+import { injected } from "wagmi/connectors";
+import { base } from "wagmi/chains";
+import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
+import { ThirdwebProvider } from "thirdweb/react";
+import { createThirdwebClient } from "thirdweb";
+import { base as thirdwebBase } from "thirdweb/chains";
 
-export function Providers({ children }: { children: React.ReactNode }) {
-  const [queryClient] = useState(() => new QueryClient({
-    defaultOptions: {
-      queries: {
-        retry: 3,
-        staleTime: 1000 * 60 * 5, // 5分钟
-      },
-    },
-  }));
+const wagmiConfig = createConfig({
+  chains: [base],
+  connectors: [injected()],
+  transports: { [base.id]: http() },
+});
 
+const thirdwebClient = createThirdwebClient({
+  clientId: process.env.NEXT_PUBLIC_THIRDWEB_CLIENT_ID ?? "demo",
+});
+
+export function Providers({ children }: { children: ReactNode }) {
+  const [queryClient] = useState(() => new QueryClient());
   return (
-    
-      
-        {children}
-      
-    
+    <WagmiProvider config={wagmiConfig}>
+      <QueryClientProvider client={queryClient}>
+        <ThirdwebProvider client={thirdwebClient} activeChain={thirdwebBase}>
+          {children}
+        </ThirdwebProvider>
+      </QueryClientProvider>
+    </WagmiProvider>
   );
 }
