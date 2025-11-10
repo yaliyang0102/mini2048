@@ -1,10 +1,11 @@
 // src/app/page.tsx
-export const dynamic = "force-dynamic";
+export const dynamic = 'force-dynamic';
 export const revalidate = 0;
 
-import dynamic from "next/dynamic";
-const GameClient = dynamic(() => import("./game-client"), { ssr: false });
+import NextDynamic from 'next/dynamic'; // ✅ 改名，避免与上面的 dynamic 冲突
+
+const GameClient = NextDynamic(() => import('./game-client'), { ssr: false });
 
 export default function Page() {
-  return <GameClient />; // 这里不做任何与钱包/游戏相关的引用
+  return <GameClient />;
 }
