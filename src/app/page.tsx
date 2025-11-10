@@ -4,9 +4,13 @@ import nextDynamic from "next/dynamic";
 export const dynamic = "force-dynamic";
 export const revalidate = 0;
 
-const GameBoard = nextDynamic(() => import("../components/GameBoard"), {
-  ssr: false, // 只在客户端渲染
-  loading: () => <div className="mono">loading game…</div>,
+const GameClient = nextDynamic(() => import("./game-client"), {
+  ssr: false, // 关键：整个客户端根都只在浏览器执行
+  loading: () => (
+    <main className="container">
+      <div className="card mono">loading…</div>
+    </main>
+  ),
 });
 
 export default function Page() {
@@ -14,7 +18,7 @@ export default function Page() {
     <main className="container">
       <div className="card">
         <div className="h1">mini2048</div>
-        <GameBoard onGameOver={(s) => console.log("score:", s)} />
+        <GameClient />
       </div>
     </main>
   );
