@@ -1,10 +1,9 @@
-// src/app/layout.tsx
 import type { Metadata } from "next";
 import "./globals.css";
 import dynamic from "next/dynamic";
 
 const NoSSRProviders = dynamic(() => import("./providers").then(m => m.Providers), {
-  ssr: false,
+  ssr: false, // 关键：wagmi 只在客户端加载
 });
 
 export const metadata: Metadata = {
