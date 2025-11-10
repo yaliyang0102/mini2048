@@ -28,8 +28,8 @@ class ErrorBoundary extends Component {
     if (this.state.hasError) {
       return (
         
-          出现错误
-          钱包连接或游戏出现问题，请刷新页面重试
+          {'出现错误'} {/* ✅ 用引号和花括号正确包围中文字符串 */}
+          {'钱包连接或游戏出现问题，请刷新页面重试'} {/* ✅ 同样修复 */}
            this.setState({ hasError: false })}
             style={{
               marginTop: '10px',
@@ -41,7 +41,7 @@ class ErrorBoundary extends Component {
               cursor: 'pointer'
             }}
           >
-            重试
+            {'重试'} {/* ✅ 修复按钮文本 */}
           
         
       );
