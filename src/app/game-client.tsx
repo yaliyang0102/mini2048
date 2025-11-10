@@ -5,7 +5,7 @@ import GameBoard from "../components/GameBoard";
 import MintButton from "../components/MintButton";
 
 export default function GameClient() {
-  // 先默认 ready=true，确保就算 SDK 失败也能渲染页面
+  // 保持就算 SDK 失败也能先渲染 UI
   const [ready, setReady] = useState(true);
   const [score, setScore] = useState(0);
   const [isOver, setIsOver] = useState(false);
@@ -14,18 +14,16 @@ export default function GameClient() {
   const { connect, connectors } = useConnect();
 
   useEffect(() => {
-    // 在浏览器侧再尝试加载 Farcaster SDK；失败也不影响页面
     (async () => {
       try {
-        // 动态导入，避免在模块导入阶段崩溃
-        const MiniApp = await import("@farcaster/miniapp-sdk");
-        const sdk = (MiniApp as any).sdk ?? MiniApp?.default?.sdk;
-        if (sdk?.actions?.ready) {
-          await sdk.actions.ready();
+        // ✅ 关键：把模块当 any，用多重兜底拿到 sdk
+        const mod: any = await import("@farcaster/miniapp-sdk");
+        const fcSdk = mod?.sdk ?? mod?.default?.sdk ?? mod?.default ?? mod;
+        if (fcSdk?.actions?.ready) {
+          await fcSdk.actions.ready();
         }
-      } catch (e) {
-        // 静默兜底：不是在 Warpcast 环境中时这里常见
-        // console.debug("miniapp-sdk init skipped:", e);
+      } catch {
+        // 非 Warpcast 环境常见：忽略即可
       } finally {
         setReady(true);
       }
@@ -47,7 +45,6 @@ export default function GameClient() {
     }
   };
 
-  // 即使 ready 为 false 也尽量渲染 UI，这里只在极早期显示 loading
   if (!ready) return <div className="card">加载中…</div>;
 
   return (
