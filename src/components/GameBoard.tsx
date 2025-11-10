@@ -1,290 +1,551 @@
-"use client";
+'use client';
 
-import { useEffect, useMemo, useRef, useState } from "react";
-import MintButton from "./MintButton";
+import { useState, useEffect, useRef, useCallback } from 'react';
+import { useAccount } from 'wagmi';
+import WalletConnection from './WalletConnection';
+import MintButton from './MintButton';
 
-type Grid = number[][];
-const SIZE = 4;
+interface Position {
+  row: number;
+  col: number;
+}
 
-// ---------- 工具函数 ----------
-const clone = (g: Grid) => g.map((r) => [...r]);
-const emptyCells = (g: Grid) => {
-  const cells: Array<[number, number]> = [];
-  g.forEach((row, i) =>
-    row.forEach((v, j) => {
-      if (v === 0) cells.push([i, j]);
-    })
+interface Tile {
+  id: number;
+  value: number;
+  position: Position;
+  isNew: boolean;
+  isMerged: boolean;
+}
+
+export default function GameBoard() {
+  const { isConnected } = useAccount();
+  
+  // 游戏状态
+  const [board, setBoard] = useState(() => 
+    Array(4).fill(null).map(() => Array(4).fill(0))
   );
-  return cells;
-};
-const randChoice = <T,>(arr: T[]) => arr[Math.floor(Math.random() * arr.length)];
-const addRandomTile = (g: Grid) => {
-  const cells = emptyCells(g);
-  if (!cells.length) return g;
-  const [i, j] = randChoice(cells);
-  g[i][j] = Math.random() < 0.9 ? 2 : 4;
-  return g;
-};
-const newGrid = (): Grid =>
-  addRandomTile(addRandomTile(Array.from({ length: SIZE }, () => Array(SIZE).fill(0))));
-
-const compress = (row: number[]) => row.filter((x) => x !== 0);
-const padRight = (row: number[]) => [...row, ...Array(SIZE - row.length).fill(0)];
-const padLeft = (row: number[]) => [...Array(SIZE - row.length).fill(0), ...row];
-
-function moveLeft(grid: Grid) {
-  let scoreAdd = 0;
-  const next = grid.map((row) => {
-    const line = compress(row);
-    const merged: number[] = [];
-    for (let i = 0; i < line.length; i++) {
-      if (line[i] === line[i + 1]) {
-        const v = line[i] * 2;
-        merged.push(v);
-        scoreAdd += v;
-        i++;
-      } else merged.push(line[i]);
-    }
-    return padRight(merged);
-  });
-  return { next, scoreAdd };
-}
-
-function reverseRows(g: Grid) {
-  return g.map((r) => [...r].reverse());
-}
-function transpose(g: Grid) {
-  const t: Grid = Array.from({ length: SIZE }, () => Array(SIZE).fill(0));
-  for (let i = 0; i < SIZE; i++) for (let j = 0; j < SIZE; j++) t[i][j] = g[j][i];
-  return t;
-}
-
-const equalGrid = (a: Grid, b: Grid) =>
-  a.every((row, i) => row.every((v, j) => v === b[i][j]));
-
-const hasMove = (g: Grid) => {
-  if (emptyCells(g).length) return true;
-  for (let i = 0; i < SIZE; i++)
-    for (let j = 0; j < SIZE - 1; j++)
-      if (g[i][j] === g[i][j + 1]) return true;
-  for (let j = 0; j < SIZE; j++)
-    for (let i = 0; i < SIZE - 1; i++)
-      if (g[i][j] === g[i + 1][j]) return true;
-  return false;
-};
-
-// ---------- 新增：内联样式 ----------
-const boardStyle: React.CSSProperties = {
-  display: "grid",
-  gridTemplateColumns: "repeat(4, 1fr)",
-  gap: 10,
-  width: "min(92vw, 420px)",
-  margin: "12px auto",
-  background: "#bbada0",
-  padding: 10,
-  borderRadius: 10,
-};
-
-const colorMap: Record<number, string> = {
-  2: "#eee4da",
-  4: "#ede0c8",
-  8: "#f2b179",
-  16: "#f59563",
-  32: "#f67c5f",
-  64: "#f65e3b",
-  128: "#edcf72",
-  256: "#edcc61",
-  512: "#edc850",
-  1024: "#edc53f",
-  2048: "#edc22e",
-};
-
-const tileStyle = (v: number): React.CSSProperties => ({
-  background: v === 0 ? "#cdc1b4" : colorMap[v] || "#edc53f",
-  color: v <= 4 ? "#776e65" : "#f9f6f2",
-  borderRadius: 8,
-  display: "flex",
-  alignItems: "center",
-  justifyContent: "center",
-  fontWeight: 700,
-  fontSize: "clamp(18px, 6vw, 28px)",
-  aspectRatio: "1 / 1", // 正方形
-  userSelect: "none",
-});
-
-// ---------- 组件 ----------
-export default function GameBoard({ onGameOver }: { onGameOver?: (score: number) => void }) {
-  const [grid, setGrid] = useState<Grid>(() => newGrid());
   const [score, setScore] = useState(0);
-  const [best, setBest] = useState(0);
-  const [movedFlag, setMovedFlag] = useState(false);
+  const [bestScore, setBestScore] = useState(0);
+  const [gameOver, setGameOver] = useState(false);
+  const [gameWon, setGameWon] = useState(false);
+  const [canUndo, setCanUndo] = useState(false);
+  const [previousState, setPreviousState] = useState<{
+    board: number[][];
+    score: number;
+  } | null>(null);
 
-  const threshold = 128;
-  const containerRef = useRef<HTMLDivElement>(null);
-  const touch = useRef<{ x: number; y: number } | null>(null);
+  // 触摸事件状态
+  const [touchStart, setTouchStart] = useState<{ x: number; y: number } | null>(null);
+  const [touchEnd, setTouchEnd] = useState<{ x: number; y: number } | null>(null);
+  
+  const gameContainerRef = useRef(null);
+  const minSwipeDistance = 50;
 
+  // 从localStorage加载最佳分数
   useEffect(() => {
-    try {
-      const b = localStorage.getItem("best-score");
-      if (b) setBest(parseInt(b));
-    } catch {}
+    const saved = localStorage.getItem('2048-best-score');
+    if (saved) {
+      setBestScore(parseInt(saved));
+    }
   }, []);
 
+  // 保存最佳分数
   useEffect(() => {
-    if (score > best) {
-      setBest(score);
-      try {
-        localStorage.setItem("best-score", String(score));
-      } catch {}
+    if (score > bestScore) {
+      setBestScore(score);
+      localStorage.setItem('2048-best-score', score.toString());
     }
-  }, [score, best]);
+  }, [score, bestScore]);
 
-  // 键盘
-  useEffect(() => {
-    const onKey = (e: KeyboardEvent) => {
-      let dir: "left" | "right" | "up" | "down" | null = null;
-      if (e.key === "ArrowLeft" || e.key === "a") dir = "left";
-      if (e.key === "ArrowRight" || e.key === "d") dir = "right";
-      if (e.key === "ArrowUp" || e.key === "w") dir = "up";
-      if (e.key === "ArrowDown" || e.key === "s") dir = "down";
-      if (dir) {
-        e.preventDefault();
-        move(dir);
-      }
-    };
-    window.addEventListener("keydown", onKey, { passive: false });
-    return () => window.removeEventListener("keydown", onKey);
-  }, [grid, score]);
-
-  // 触控
-  useEffect(() => {
-    const el = containerRef.current;
-    if (!el) return;
-
-    const start = (e: TouchEvent) => {
-      const t = e.touches[0];
-      touch.current = { x: t.clientX, y: t.clientY };
-    };
-    const end = (e: TouchEvent) => {
-      if (!touch.current) return;
-      const t = e.changedTouches[0];
-      const dx = t.clientX - touch.current.x;
-      const dy = t.clientY - touch.current.y;
-      const ax = Math.abs(dx);
-      const ay = Math.abs(dy);
-      if (Math.max(ax, ay) < 20) return;
-      if (ax > ay) move(dx > 0 ? "right" : "left");
-      else move(dy > 0 ? "down" : "up");
-      touch.current = null;
-    };
-
-    el.addEventListener("touchstart", start, { passive: true });
-    el.addEventListener("touchend", end, { passive: true });
-    return () => {
-      el.removeEventListener("touchstart", start);
-      el.removeEventListener("touchend", end);
-    };
-  }, [grid, score]);
-
-  const move = (dir: "left" | "right" | "up" | "down") => {
-    let base = clone(grid);
-    let rotated = base;
-
-    if (dir === "right") rotated = reverseRows(base);
-    if (dir === "up") rotated = transpose(base);
-    if (dir === "down") rotated = reverseRows(transpose(base));
-
-    const { next, scoreAdd } = moveLeft(rotated);
-
-    let restored = next;
-    if (dir === "right") restored = reverseRows(next);
-    if (dir === "up") restored = transpose(next);
-    if (dir === "down") restored = transpose(reverseRows(next));
-
-    if (!equalGrid(restored, grid)) {
-      const withNew = addRandomTile(restored);
-      setGrid(withNew);
-      setScore((s) => s + scoreAdd);
-      setMovedFlag(true);
-
-      if (!hasMove(withNew)) {
-        onGameOver?.(score + scoreAdd);
-        setTimeout(() => alert(`Game Over! 得分 ${score + scoreAdd}`), 10);
-      }
-    } else {
-      setMovedFlag(false);
-    }
-  };
-
-  const reset = () => {
-    setGrid(newGrid());
+  // 初始化游戏
+  const initGame = useCallback(() => {
+    const newBoard = Array(4).fill(null).map(() => Array(4).fill(0));
+    addRandomTile(newBoard);
+    addRandomTile(newBoard);
+    setBoard(newBoard);
     setScore(0);
+    setGameOver(false);
+    setGameWon(false);
+    setCanUndo(false);
+    setPreviousState(null);
+  }, []);
+
+  // 添加随机方块
+  const addRandomTile = (currentBoard: number[][]) => {
+    const emptyCells: Position[] = [];
+    for (let row = 0; row < 4; row++) {
+      for (let col = 0; col < 4; col++) {
+        if (currentBoard[row][col] === 0) {
+          emptyCells.push({ row, col });
+        }
+      }
+    }
+    
+    if (emptyCells.length > 0) {
+      const randomCell = emptyCells[Math.floor(Math.random() * emptyCells.length)];
+      currentBoard[randomCell.row][randomCell.col] = Math.random() < 0.9 ? 2 : 4;
+    }
   };
 
-  const tiles = useMemo(
-    () =>
-      grid.flatMap((row, i) =>
-        row.map((v, j) => (
-          <div
-            key={`${i}-${j}-${v}-${movedFlag ? "m" : "s"}`}
-            style={tileStyle(v)}
-          >
-            {v || ""}
-          </div>
-        ))
-      ),
-    [grid, movedFlag]
-  );
+  // 深拷贝棋盘
+  const copyBoard = (board: number[][]): number[][] => {
+    return board.map(row => [...row]);
+  };
+
+  // 检查两个棋盘是否相同
+  const boardsEqual = (board1: number[][], board2: number[][]) => {
+    for (let i = 0; i < 4; i++) {
+      for (let j = 0; j < 4; j++) {
+        if (board1[i][j] !== board2[i][j]) return false;
+      }
+    }
+    return true;
+  };
+
+  // 移动逻辑 - 左移
+  const moveLeft = (board: number[][]): { newBoard: number[][]; scoreGained: number; moved: boolean } => {
+    let scoreGained = 0;
+    let moved = false;
+    const newBoard = copyBoard(board);
+
+    for (let row = 0; row < 4; row++) {
+      const filteredRow = newBoard[row].filter(val => val !== 0);
+      const mergedRow: number[] = [];
+      let i = 0;
+
+      while (i < filteredRow.length) {
+        if (i < filteredRow.length - 1 && filteredRow[i] === filteredRow[i + 1]) {
+          const mergedValue = filteredRow[i] * 2;
+          mergedRow.push(mergedValue);
+          scoreGained += mergedValue;
+          i += 2;
+        } else {
+          mergedRow.push(filteredRow[i]);
+          i++;
+        }
+      }
+
+      while (mergedRow.length < 4) {
+        mergedRow.push(0);
+      }
+
+      if (mergedRow.toString() !== newBoard[row].toString()) {
+        moved = true;
+      }
+      newBoard[row] = mergedRow;
+    }
+
+    return { newBoard, scoreGained, moved };
+  };
+
+  // 移动逻辑 - 右移
+  const moveRight = (board: number[][]): { newBoard: number[][]; scoreGained: number; moved: boolean } => {
+    let scoreGained = 0;
+    let moved = false;
+    const newBoard = copyBoard(board);
+
+    for (let row = 0; row < 4; row++) {
+      const filteredRow = newBoard[row].filter(val => val !== 0);
+      const mergedRow: number[] = [];
+      let i = filteredRow.length - 1;
+
+      while (i >= 0) {
+        if (i > 0 && filteredRow[i] === filteredRow[i - 1]) {
+          const mergedValue = filteredRow[i] * 2;
+          mergedRow.unshift(mergedValue);
+          scoreGained += mergedValue;
+          i -= 2;
+        } else {
+          mergedRow.unshift(filteredRow[i]);
+          i--;
+        }
+      }
+
+      while (mergedRow.length < 4) {
+        mergedRow.unshift(0);
+      }
+
+      if (mergedRow.toString() !== newBoard[row].toString()) {
+        moved = true;
+      }
+      newBoard[row] = mergedRow;
+    }
+
+    return { newBoard, scoreGained, moved };
+  };
+
+  // 移动逻辑 - 上移
+  const moveUp = (board: number[][]): { newBoard: number[][]; scoreGained: number; moved: boolean } => {
+    let scoreGained = 0;
+    let moved = false;
+    const newBoard = copyBoard(board);
+
+    for (let col = 0; col < 4; col++) {
+      const column = [];
+      for (let row = 0; row < 4; row++) {
+        if (newBoard[row][col] !== 0) {
+          column.push(newBoard[row][col]);
+        }
+      }
+
+      const mergedColumn: number[] = [];
+      let i = 0;
+
+      while (i < column.length) {
+        if (i < column.length - 1 && column[i] === column[i + 1]) {
+          const mergedValue = column[i] * 2;
+          mergedColumn.push(mergedValue);
+          scoreGained += mergedValue;
+          i += 2;
+        } else {
+          mergedColumn.push(column[i]);
+          i++;
+        }
+      }
+
+      while (mergedColumn.length < 4) {
+        mergedColumn.push(0);
+      }
+
+      for (let row = 0; row < 4; row++) {
+        if (newBoard[row][col] !== mergedColumn[row]) {
+          moved = true;
+        }
+        newBoard[row][col] = mergedColumn[row];
+      }
+    }
+
+    return { newBoard, scoreGained, moved };
+  };
+
+  // 移动逻辑 - 下移
+  const moveDown = (board: number[][]): { newBoard: number[][]; scoreGained: number; moved: boolean } => {
+    let scoreGained = 0;
+    let moved = false;
+    const newBoard = copyBoard(board);
+
+    for (let col = 0; col < 4; col++) {
+      const column = [];
+      for (let row = 0; row < 4; row++) {
+        if (newBoard[row][col] !== 0) {
+          column.push(newBoard[row][col]);
+        }
+      }
+
+      const mergedColumn: number[] = [];
+      let i = column.length - 1;
+
+      while (i >= 0) {
+        if (i > 0 && column[i] === column[i - 1]) {
+          const mergedValue = column[i] * 2;
+          mergedColumn.unshift(mergedValue);
+          scoreGained += mergedValue;
+          i -= 2;
+        } else {
+          mergedColumn.unshift(column[i]);
+          i--;
+        }
+      }
+
+      while (mergedColumn.length < 4) {
+        mergedColumn.unshift(0);
+      }
+
+      for (let row = 0; row < 4; row++) {
+        if (newBoard[row][col] !== mergedColumn[row]) {
+          moved = true;
+        }
+        newBoard[row][col] = mergedColumn[row];
+      }
+    }
+
+    return { newBoard, scoreGained, moved };
+  };
+
+  // 检查游戏是否结束
+  const checkGameOver = (currentBoard: number[][]) => {
+    // 检查是否有空格
+    for (let row = 0; row < 4; row++) {
+      for (let col = 0; col < 4; col++) {
+        if (currentBoard[row][col] === 0) return false;
+      }
+    }
+
+    // 检查是否可以合并
+    for (let row = 0; row < 4; row++) {
+      for (let col = 0; col < 4; col++) {
+        const current = currentBoard[row][col];
+        if (
+          (col < 3 && current === currentBoard[row][col + 1]) ||
+          (row < 3 && current === currentBoard[row + 1][col])
+        ) {
+          return false;
+        }
+      }
+    }
+
+    return true;
+  };
+
+  // 检查是否获胜
+  const checkWin = (currentBoard: number[][]) => {
+    for (let row = 0; row < 4; row++) {
+      for (let col = 0; col < 4; col++) {
+        if (currentBoard[row][col] === 2048) return true;
+      }
+    }
+    return false;
+  };
+
+  // 执行移动
+  const performMove = (direction: 'left' | 'right' | 'up' | 'down') => {
+    if (gameOver) return;
+
+    // 保存当前状态用于撤销
+    setPreviousState({
+      board: copyBoard(board),
+      score: score
+    });
+
+    let result;
+    switch (direction) {
+      case 'left':
+        result = moveLeft(board);
+        break;
+      case 'right':
+        result = moveRight(board);
+        break;
+      case 'up':
+        result = moveUp(board);
+        break;
+      case 'down':
+        result = moveDown(board);
+        break;
+    }
+
+    const { newBoard, scoreGained, moved } = result;
+
+    if (moved) {
+      addRandomTile(newBoard);
+      setBoard(newBoard);
+      setScore(prev => prev + scoreGained);
+      setCanUndo(true);
+
+      if (checkWin(newBoard) && !gameWon) {
+        setGameWon(true);
+      }
+
+      if (checkGameOver(newBoard)) {
+        setGameOver(true);
+      }
+    }
+  };
+
+  // 撤销操作
+  const undoMove = () => {
+    if (previousState && canUndo) {
+      setBoard(previousState.board);
+      setScore(previousState.score);
+      setCanUndo(false);
+      setPreviousState(null);
+      setGameOver(false);
+    }
+  };
+
+  // 键盘事件处理
+  useEffect(() => {
+    const handleKeyPress = (e: KeyboardEvent) => {
+      if (gameOver) return;
+
+      switch (e.key) {
+        case 'ArrowLeft':
+          e.preventDefault();
+          performMove('left');
+          break;
+        case 'ArrowRight':
+          e.preventDefault();
+          performMove('right');
+          break;
+        case 'ArrowUp':
+          e.preventDefault();
+          performMove('up');
+          break;
+        case 'ArrowDown':
+          e.preventDefault();
+          performMove('down');
+          break;
+        case 'u':
+        case 'U':
+          e.preventDefault();
+          undoMove();
+          break;
+      }
+    };
+
+    document.addEventListener('keydown', handleKeyPress);
+    return () => document.removeEventListener('keydown', handleKeyPress);
+  }, [board, score, gameOver, previousState, canUndo, gameWon]);
+
+  // 触摸事件处理
+  const onTouchStart = (e: React.TouchEvent) => {
+    setTouchEnd(null);
+    setTouchStart({
+      x: e.targetTouches[0].clientX,
+      y: e.targetTouches[0].clientY,
+    });
+  };
+
+  const onTouchMove = (e: React.TouchEvent) => {
+    setTouchEnd({
+      x: e.targetTouches[0].clientX,
+      y: e.targetTouches[0].clientY,
+    });
+  };
+
+  const onTouchEnd = () => {
+    if (!touchStart || !touchEnd) return;
+
+    const distanceX = touchStart.x - touchEnd.x;
+    const distanceY = touchStart.y - touchEnd.y;
+    const isLeftSwipe = distanceX > minSwipeDistance;
+    const isRightSwipe = distanceX < -minSwipeDistance;
+    const isUpSwipe = distanceY > minSwipeDistance;
+    const isDownSwipe = distanceY < -minSwipeDistance;
+
+    if (Math.abs(distanceX) > Math.abs(distanceY)) {
+      if (isLeftSwipe) performMove('left');
+      if (isRightSwipe) performMove('right');
+    } else {
+      if (isUpSwipe) performMove('up');
+      if (isDownSwipe) performMove('down');
+    }
+  };
+
+  // 获取方块颜色
+  const getTileColor = (value: number): { bg: string; color: string } => {
+    const colors: { [key: number]: { bg: string; color: string } } = {
+      2: { bg: '#eee4da', color: '#776e65' },
+      4: { bg: '#ede0c8', color: '#776e65' },
+      8: { bg: '#f2b179', color: '#f9f6f2' },
+      16: { bg: '#f59563', color: '#f9f6f2' },
+      32: { bg: '#f67c5f', color: '#f9f6f2' },
+      64: { bg: '#f65e3b', color: '#f9f6f2' },
+      128: { bg: '#edcf72', color: '#f9f6f2' },
+      256: { bg: '#edcc61', color: '#f9f6f2' },
+      512: { bg: '#edc850', color: '#f9f6f2' },
+      1024: { bg: '#edc53f', color: '#f9f6f2' },
+      2048: { bg: '#edc22e', color: '#f9f6f2' }
+    };
+    return colors[value] || { bg: '#3c3a32', color: '#f9f6f2' };
+  };
+
+  // 初始化游戏
+  useEffect(() => {
+    initGame();
+  }, [initGame]);
 
   return (
-    <div ref={containerRef} style={{ maxWidth: 560, margin: "0 auto", padding: 16 }}>
-      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-        <div style={{ fontSize: 28, fontWeight: 800 }}>2048</div>
-        <div style={{ fontFamily: "ui-monospace, SFMono-Regular, Menlo, Consolas, monospace" }}>
-          Score: {score} &nbsp; Best: {best}
-        </div>
-      </div>
+    
+      
+      
+      {/* 游戏标题和分数 */}
+      
+        
+          2048
+        
+        
+        
+          
+            SCORE
+            
+              {score.toLocaleString()}
+            
+          
+          
+          
+            BEST
+            
+              {bestScore.toLocaleString()}
+            
+          
+        
+      
 
-      <div style={boardStyle}>{tiles}</div>
+      {/* 游戏网格 */}
+      
+        {board.flat().map((value, index) => {
+          const { bg, color } = getTileColor(value);
+          return (
+             100 ? '20px' : value > 10 ? '24px' : '28px',
+                fontWeight: 'bold',
+                color: color,
+                transition: 'all 0.15s ease-in-out',
+                aspectRatio: '1',
+                position: 'relative'
+              }}
+            >
+              {value || ''}
+            
+          );
+        })}
+      
 
-      <div style={{ opacity: 0.8, marginBottom: 8 }}>
-        使用方向键或滑动操作；相同数字合并，冲击 2048！
-      </div>
+      {/* 控制按钮 */}
+      
+        
+          新游戏
+        
+        
+        
+          撤销 (U)
+        
+      
 
-      <div style={{ display: "flex", gap: 10 }}>
-        {score >= 128 ? (
-          <MintButton quantity={1} />
-        ) : (
-          <button
-            style={{
-              flex: 1,
-              padding: "10px 12px",
-              borderRadius: 8,
-              background: "#aaa",
-              color: "#fff",
-              border: 0,
-              cursor: "not-allowed",
-            }}
-            title="达到 128 分解锁 Mint"
-            disabled
-          >
-            Mint（需 128 分）
-          </button>
-        )}
-        <button
-          onClick={reset}
-          style={{
-            flex: 1,
-            padding: "10px 12px",
-            borderRadius: 8,
-            background: "#8f7a66",
-            color: "#fff",
-            border: 0,
-          }}
-        >
-          重新开始
-        </button>
-      </div>
-    </div>
+      {/* NFT 铸造区域 */}
+      {score >= 128 && (
+        
+          
+            🎉 恭喜达成 {score >= 2048 ? '2048' : '128'} 分！
+          
+          
+          {!isConnected ? (
+            
+              请连接钱包以铸造 NFT
+            
+          ) : (
+            
+          )}
+        
+      )}
+
+      {/* 游戏说明 */}
+      
+        🎯 目标: 合并相同数字达到 2048
+        ⌨️ 操作: 方向键移动，U键撤销
+        📱 手机: 滑动屏幕控制
+        🎁 奖励: 达到 128 分可铸造 NFT
+      
+
+      {/* 游戏结束/获胜弹窗 */}
+      {(gameOver || gameWon) && (
+        
+          
+            
+              {gameWon ? '🎉 恭喜获胜！' : '😢 游戏结束'}
+            
+            
+            
+              最终得分: {score.toLocaleString()}
+              {score > bestScore && 🏆 新纪录！}
+            
+            
+            
+              再玩一次
+            
+          
+        
+      )}
+    
   );
 }
