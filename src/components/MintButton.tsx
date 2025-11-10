@@ -1,43 +1,50 @@
-// src/components/MintButton.tsx
-"use client";
+'use client';
 
 import { ClaimButton } from "thirdweb/react";
-import { createThirdwebClient } from "thirdweb";
+import { getThirdwebClient } from "../app/thirdweb";
+import { getContract } from "thirdweb";
 import { base } from "thirdweb/chains";
-import { useMemo } from "react";
 
-// ⚠️ 替换为你的 DropERC721 合约地址
-const CONTRACT = "0x5679356AF6B4c93D4626AEAaccbACb411aa6577D";
+export default function MintButton({ quantity }: { quantity: number }) {
+  const client = getThirdwebClient();
+  
+  // 使用环境变量而非硬编码
+  const contractAddress = process.env.NEXT_PUBLIC_CONTRACT_ADDRESS || "0x5679356AF6B4c93D4626AEAaccbACb411aa6577D";
 
-// ⚠️ 需要在环境变量配置 NEXT_PUBLIC_THIRDWEB_CLIENT_ID
-const client = createThirdwebClient({
-  clientId: process.env.NEXT_PUBLIC_THIRDWEB_CLIENT_ID!,
-});
+  if (!client) {
+    return (
+      
+        Thirdweb客户端初始化失败
+      
+    );
+  }
 
-type Props = {
-  /** ERC721 铸造数量，默认 1 */
-  quantity?: number;
-};
-
-export default function MintButton({ quantity = 1 }: Props) {
-  // thirdweb v5: ERC721 的 quantity 必须是 bigint
-  const quantityBigInt = useMemo(
-    () => BigInt(Math.max(1, Math.floor(quantity))),
-    [quantity],
-  );
+  const contract = getContract({
+    client,
+    chain: base,
+    address: contractAddress,
+  });
 
   return (
-    <ClaimButton
-      client={client}
-      chain={base}
-      contractAddress={CONTRACT}
-      // ✅ 明确声明 ERC721，并传 bigint
-      claimParams={{ type: "ERC721", quantity: quantityBigInt }}
-      onError={(e) => alert(e?.message ?? "铸造失败")}
-      onTransactionConfirmed={() => alert("铸造成功")}
-      style={{ width: "100%" }}
+     {
+        alert(`NFT铸造成功！交易哈希: ${result.transactionHash}`);
+      }}
+      onError={(error) => {
+        console.error('铸造错误:', error);
+        alert('铸造失败，请重试');
+      }}
+      style={{
+        width: '100%',
+        padding: '10px 12px',
+        borderRadius: '8px',
+        background: '#6a5cff',
+        color: 'white',
+        border: 'none',
+        cursor: 'pointer',
+        fontSize: '14px'
+      }}
     >
-      Mint
-    </ClaimButton>
+      铸造NFT
+    
   );
 }
