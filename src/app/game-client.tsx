@@ -1,12 +1,12 @@
 "use client";
 import { useEffect, useMemo, useState } from "react";
 import { useAccount, useConnect } from "wagmi";
-import { sdk } from "@farcaster/miniapp-sdk";
 import GameBoard from "../components/GameBoard";
 import MintButton from "../components/MintButton";
 
 export default function GameClient() {
-  const [ready, setReady] = useState(false);
+  // 先默认 ready=true，确保就算 SDK 失败也能渲染页面
+  const [ready, setReady] = useState(true);
   const [score, setScore] = useState(0);
   const [isOver, setIsOver] = useState(false);
 
@@ -14,13 +14,21 @@ export default function GameClient() {
   const { connect, connectors } = useConnect();
 
   useEffect(() => {
+    // 在浏览器侧再尝试加载 Farcaster SDK；失败也不影响页面
     (async () => {
       try {
-        await sdk.actions.ready(); // 通知 Warpcast：Mini App 已就绪
-      } catch {
-        // 即使不在 Warpcast 环境，也允许继续玩
+        // 动态导入，避免在模块导入阶段崩溃
+        const MiniApp = await import("@farcaster/miniapp-sdk");
+        const sdk = (MiniApp as any).sdk ?? MiniApp?.default?.sdk;
+        if (sdk?.actions?.ready) {
+          await sdk.actions.ready();
+        }
+      } catch (e) {
+        // 静默兜底：不是在 Warpcast 环境中时这里常见
+        // console.debug("miniapp-sdk init skipped:", e);
+      } finally {
+        setReady(true);
       }
-      setReady(true);
     })();
   }, []);
 
@@ -35,9 +43,11 @@ export default function GameClient() {
       await connect({ connector: fcConnector });
     } catch (e) {
       console.error(e);
+      alert("连接 Farcaster 钱包失败，可以改用浏览器钱包测试。");
     }
   };
 
+  // 即使 ready 为 false 也尽量渲染 UI，这里只在极早期显示 loading
   if (!ready) return <div className="card">加载中…</div>;
 
   return (
@@ -51,10 +61,6 @@ export default function GameClient() {
         onGameOver={(s) => {
           setScore(s);
           setIsOver(true);
-          if (s >= 2048) {
-            // 可选：达成成就后分享到 Warpcast
-            // sdk.actions.share({ text: `我刚在 2048 得了 ${s} 分，解锁了 NFT！` });
-          }
         }}
       />
 
