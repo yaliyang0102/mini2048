@@ -1,3 +1,4 @@
+// src/components/ErrorBoundary.tsx
 "use client";
 import React from "react";
 
@@ -7,31 +8,33 @@ type State = { hasError: boolean };
 export default class ErrorBoundary extends React.Component<Props, State> {
   state: State = { hasError: false };
 
-  static getDerivedStateFromError(_: Error): State {
+  static getDerivedStateFromError() {
     return { hasError: true };
   }
 
-  componentDidCatch(error: Error, info: React.ErrorInfo) {
-    console.error("[ErrorBoundary] caught error:", error, info);
+  componentDidCatch(error: any, info: any) {
+    console.error("ErrorBoundary caught:", error, info);
   }
 
   render() {
     if (this.state.hasError) {
       return (
-        <div style={{ maxWidth: 560, margin: "40px auto", padding: 16 }}>
-          <h2 style={{ margin: 0 }}>出现错误</h2>
-          <p style={{ opacity: 0.8 }}>
-            钱包连接或游戏出现问题，请刷新页面重试。
-          </p>
-          <button
-            className="btn"
-            onClick={() => this.setState({ hasError: false })}
-          >
-            重新加载
-          </button>
+        <div style={{ minHeight: "60vh", display: "grid", placeItems: "center", padding: 24 }}>
+          <div className="card" style={{ textAlign: "center" }}>
+            <h2 className="h1" style={{ marginTop: 0 }}>出现错误</h2>
+            <p className="mono">钱包连接或游戏出现问题，请刷新页面重试</p>
+            <button
+              className="btn"
+              onClick={() => this.setState({ hasError: false })}
+              style={{ marginTop: 12 }}
+            >
+              重试
+            </button>
+          </div>
         </div>
       );
     }
+    // ✅ 这里一定要返回 this.props.children，不能写成 { children } 或者包在对象里
     return this.props.children;
   }
 }
