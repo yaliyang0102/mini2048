@@ -1,27 +1,22 @@
-import type { Metadata } from "next";
+// src/app/layout.tsx
+import "./globals.css";
 import { Providers } from "./providers";
 import ErrorBoundary from "../components/ErrorBoundary";
-import "./globals.css";
 
-export const metadata: Metadata = {
-  title: "2048 NFT Game",
-  description: "Play 2048 and mint NFTs on Base!",
+export const metadata = {
+  title: "mini2048",
+  description: "health check",
 };
 
-export default function RootLayout({
-  children,
-}: {
-  children: React.ReactNode;
-}) {
+export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
-    
-      
-        
-          
-            {children}
-          
-        
-      
-    
+    <html lang="zh-CN">
+      <body>
+        <Providers>
+          {/* ✅ 正确用法是 <ErrorBoundary>{children}</ErrorBoundary> */}
+          <ErrorBoundary>{children}</ErrorBoundary>
+        </Providers>
+      </body>
+    </html>
   );
 }
