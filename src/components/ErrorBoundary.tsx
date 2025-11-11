@@ -1,54 +1,37 @@
-'use client';
+"use client";
+import React from "react";
 
-import React, { Component, ErrorInfo, ReactNode } from 'react';
+type Props = { children: React.ReactNode };
+type State = { hasError: boolean };
 
-interface Props {
-  children: ReactNode;
-}
+export default class ErrorBoundary extends React.Component<Props, State> {
+  state: State = { hasError: false };
 
-interface State {
-  hasError: boolean;
-  error?: Error;
-}
-
-class ErrorBoundary extends Component {
-  public state: State = {
-    hasError: false
-  };
-
-  public static getDerivedStateFromError(error: Error): State {
-    return { hasError: true, error };
+  static getDerivedStateFromError(_: Error): State {
+    return { hasError: true };
   }
 
-  public componentDidCatch(error: Error, errorInfo: ErrorInfo) {
-    console.error('Uncaught error:', error, errorInfo);
+  componentDidCatch(error: Error, info: React.ErrorInfo) {
+    console.error("[ErrorBoundary] caught error:", error, info);
   }
 
-  public render() {
+  render() {
     if (this.state.hasError) {
       return (
-        
-          {'出现错误'} {/* ✅ 用引号和花括号正确包围中文字符串 */}
-          {'钱包连接或游戏出现问题，请刷新页面重试'} {/* ✅ 同样修复 */}
-           this.setState({ hasError: false })}
-            style={{
-              marginTop: '10px',
-              padding: '8px 16px',
-              background: 'white',
-              color: '#ff4444',
-              border: 'none',
-              borderRadius: '4px',
-              cursor: 'pointer'
-            }}
+        <div style={{ maxWidth: 560, margin: "40px auto", padding: 16 }}>
+          <h2 style={{ margin: 0 }}>出现错误</h2>
+          <p style={{ opacity: 0.8 }}>
+            钱包连接或游戏出现问题，请刷新页面重试。
+          </p>
+          <button
+            className="btn"
+            onClick={() => this.setState({ hasError: false })}
           >
-            {'重试'} {/* ✅ 修复按钮文本 */}
-          
-        
+            重新加载
+          </button>
+        </div>
       );
     }
-
     return this.props.children;
   }
 }
-
-export default ErrorBoundary;
