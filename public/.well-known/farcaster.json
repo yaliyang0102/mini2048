@@ -4,23 +4,14 @@
     "payload": "eyJkb21haW4iOiJtaW5pMjA0OC52ZXJjZWwuYXBwIn0",
     "signature": "3Sg2XfxW+PGtA//mn4rDiEm/0VCHfl7rvblmy99z2r08o1iLbLB7q+nH96MJPIiHieLaqGIarLgzhUjypkQCXxs="
   },
-  "baseBuilder": {
-    "ownerAddress": "0xYourOwnerWalletAddress"
-  },
   "miniapp": {
     "version": "1",
     "name": "mini 2048",
-    "homeUrl": "https://mini2048.vercel.app",
     "iconUrl": "https://mini2048.vercel.app/icon.png",
+    "homeUrl": "https://mini2048.vercel.app/",
+    "imageUrl": "https://mini2048.vercel.app/og.png",
+    "buttonTitle": "开始游戏",
     "splashImageUrl": "https://mini2048.vercel.app/splash.png",
-    "splashBackgroundColor": "#000000",
-    "subtitle": "Play to mint",
-    "description": "Play 2048 and mint NFTs",
-    "primaryCategory": "games",
-    "tags": ["games", "2048", "mint"],
-    "ogTitle": "mini 2048",
-    "ogDescription": "Play 2048 and mint NFTs",
-    "ogImageUrl": "https://mini2048.vercel.app/og.png",
-    "noindex": true
+    "splashBackgroundColor": "#0B0B0F"
   }
 }
