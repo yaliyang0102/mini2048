@@ -1,19 +1,21 @@
 // src/wagmi.ts
 import { createConfig, http } from "wagmi";
 import { base } from "wagmi/chains";
-// ✅ 正确用法：从 "wagmi/connectors" 或 "@wagmi/connectors" 拿命名导出，不要用子路径
-import { injected } from "wagmi/connectors";
+import { injected } from "@wagmi/connectors";
 
+// 你可以把自定义 RPC 写在环境变量里
+const RPC = process.env.NEXT_PUBLIC_RPC_URL || "https://mainnet.base.org";
+
+/**
+ * 说明：
+ * - Farcaster Mini App 容器里会注入 EIP-1193 provider，
+ *   用 injected() 在容器里同样能连上（无需额外 miniapp connector）。
+ * - 等后面你要加 WalletConnect 或 Farcaster 专用 connector，再按版本匹配补上即可。
+ */
 export const wagmiConfig = createConfig({
   chains: [base],
-  transports: {
-    [base.id]: http(
-      process.env.NEXT_PUBLIC_BASE_RPC || "https://mainnet.base.org"
-    ),
-  },
+  transports: { [base.id]: http(RPC) },
   connectors: [
-    // 只用浏览器注入式钱包（Rabby/MetaMask/OKX/Phantom 等）
-    injected({ shimDisconnect: true }),
+    injected({ shimDisconnect: true }), // 浏览器 / Farcaster 容器都可用
   ],
-  ssr: true, // 在 Next App Router 下建议开启
 });
