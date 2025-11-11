@@ -1,29 +1,26 @@
-"use client";
+'use client';
 
-import React, { useEffect } from "react";
-import { WagmiProvider } from "wagmi";
-import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { sdk } from "@farcaster/miniapp-sdk";
-
-// ✅ 改成相对路径（providers.tsx 位于 src/app，wagmi.ts 位于 src）
-import { wagmiConfig } from "../wagmi";
-
-const queryClient = new QueryClient();
+import { useState } from 'react';
+import { WagmiProvider } from 'wagmi';
+import { wagmiConfig } from '@/wagmi';
+import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
+import { ThirdwebProvider } from 'thirdweb/react';
+import { base as thirdwebBase } from 'thirdweb/chains';
 
 export default function Providers({ children }: { children: React.ReactNode }) {
-  useEffect(() => {
-    (async () => {
-      try {
-        await sdk.actions.ready(); // Farcaster Mini App: 告诉容器“我准备好了”
-      } catch {
-        // 在普通浏览器没有容器会报错，忽略即可
-      }
-    })();
-  }, []);
+  // v5 的写法：只创建一次，避免热更新/重新渲染时丢失实例
+  const [queryClient] = useState(() => new QueryClient());
 
   return (
     <WagmiProvider config={wagmiConfig}>
-      <QueryClientProvider client={queryClient}>{children}</QueryClientProvider>
+      <QueryClientProvider client={queryClient}>
+        <ThirdwebProvider
+          clientId={process.env.NEXT_PUBLIC_THIRDWEB_CLIENT_ID!}
+          activeChain={thirdwebBase}
+        >
+          {children}
+        </ThirdwebProvider>
+      </QueryClientProvider>
     </WagmiProvider>
   );
 }
