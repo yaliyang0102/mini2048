@@ -1,26 +1,29 @@
-'use client';
+// src/app/providers.tsx
+"use client";
 
-import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
-import { WagmiProvider } from 'wagmi';
-import { useState } from 'react';
-import { wagmiConfig } from '../wagmi'; // ✅ 导入完整配置
+import { ReactNode, useState } from "react";
+import { WagmiProvider, createConfig, http } from "wagmi";
+import { injected } from "@wagmi/connectors";
+import { base } from "wagmi/chains";
+import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 
-export function Providers({ children }: { children: React.ReactNode }) {
-  const [queryClient] = useState(() => new QueryClient({
-    defaultOptions: {
-      queries: {
-        retry: 3,
-        staleTime: 1000 * 60 * 5, // 5分钟
-        refetchOnWindowFocus: false, // 避免钱包连接时的重复查询
-      },
-    },
-  }));
+// 仅使用 injected，避免引入 MetaMask SDK 等可选依赖的构建噪声
+const wagmiConfig = createConfig({
+  chains: [base],
+  transports: { [base.id]: http() },
+  connectors: [injected()],
+  ssr: true,
+});
 
+export function Providers({ children }: { children: ReactNode }): JSX.Element {
+  const [queryClient] = useState(() => new QueryClient());
+
+  // ⚠️ 一定要 return JSX，而不是 return { children }
   return (
-    
-      
+    <WagmiProvider config={wagmiConfig}>
+      <QueryClientProvider client={queryClient}>
         {children}
-      
-    
+      </QueryClientProvider>
+    </WagmiProvider>
   );
 }
