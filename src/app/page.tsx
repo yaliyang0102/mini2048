@@ -1,66 +1,86 @@
 // src/app/page.tsx
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { sdk } from '@farcaster/miniapp-sdk';
-
-type Status = 'idle' | 'ready' | 'authorizing' | 'authorized' | 'error';
+import { useAccount, useConnect } from 'wagmi';
 
 export default function Page() {
-  const [status, setStatus] = useState<Status>('idle');
-  const [msg, setMsg] = useState<string>('');
+  const [booted, setBooted] = useState(false);
+  const [hint, setHint] = useState<string>('');
 
-  // ❶ 首屏一挂载就 ready()，解决 Dev Mode 的 “Ready not called”
+  const { address, isConnected } = useAccount();
+  const { connect, connectors } = useConnect();
+
+  // 1) 首屏就 ready()，隐藏 Mini App 的 splash
   useEffect(() => {
-    try {
-      sdk.actions.ready();
-      setStatus('ready');
-    } catch (e: any) {
-      setStatus('error');
-      setMsg(e?.message ?? String(e));
-    }
-    // 注意：开发模式下 React 严格模式会让 useEffect 执行两次，生产环境不会影响
+    let mounted = true;
+    (async () => {
+      try {
+        await sdk.actions.ready();            // 关键：只在客户端调用
+        if (mounted) setBooted(true);
+      } catch (err) {
+        console.error('sdk.ready failed', err);
+        if (mounted) setHint('Mini App SDK 初始化失败');
+      }
+    })();
+    return () => { mounted = false; };
   }, []);
 
-  // ❷ 需要权限（钱包/签名）时再显式授权，避免 “has not been authorized yet”
-  const handleAuthorize = async () => {
-    setStatus('authorizing');
-    setMsg('');
+  // 2) 真正需要权限（wallet/sign）时，再触发连接（系统会弹授权）
+  const handleConnect = async () => {
     try {
-      await sdk.actions.authorize({
-        permissions: ['wallet', 'sign'],
-      });
-      setStatus('authorized');
+      setHint('');
+      // 优先使用 Farcaster 连接器；找不到就用第一个
+      const farcaster = connectors.find((c) => c.id === 'farcaster') ?? connectors[0];
+      if (!farcaster) {
+        setHint('未找到可用的钱包连接器');
+        return;
+      }
+      await connect({ connector: farcaster });
     } catch (e: any) {
-      setStatus('error');
-      setMsg(e?.message ?? String(e));
+      console.error(e);
+      setHint(e?.message || '连接失败');
     }
   };
 
+  const shortAddr = useMemo(
+    () => (address ? `${address.slice(0, 6)}…${address.slice(-4)}` : ''),
+    [address]
+  );
+
   return (
-    <main className="min-h-screen flex flex-col items-center justify-center gap-4 p-6">
-      <h1 className="text-3xl font-bold">mini 2048</h1>
-      <p className="opacity-80">
-        Farcaster Mini App 初始化状态：<b>{status}</b>
+    <main style={{ padding: 16, maxWidth: 560, margin: '0 auto', fontFamily: 'system-ui, -apple-system' }}>
+      <h1 style={{ marginBottom: 8 }}>mini 2048</h1>
+      <p style={{ marginTop: 0, color: '#666' }}>
+        SDK 状态：{booted ? 'ready ✅' : 'booting…'}
       </p>
 
-      <div className="flex items-center gap-3">
+      {hint && <div style={{ color: '#d33', margin: '12px 0' }}>{hint}</div>}
+
+      {isConnected ? (
+        <div style={{ marginTop: 16 }}>
+          <div style={{ marginBottom: 12 }}>已连接：{shortAddr}</div>
+          {/* 这里放你的 2048 游戏组件 */}
+          <div style={{ padding: 16, border: '1px solid #eee', borderRadius: 12 }}>
+            （在此渲染 2048 游戏）
+          </div>
+        </div>
+      ) : (
         <button
-          onClick={handleAuthorize}
-          className="px-4 py-2 rounded-xl shadow border"
+          type="button"
+          onClick={handleConnect}
+          style={{
+            marginTop: 12,
+            padding: '10px 14px',
+            borderRadius: 10,
+            border: '1px solid #ddd',
+            cursor: 'pointer'
+          }}
         >
-          请求授权（钱包 + 签名）
+          连接钱包（触发授权）
         </button>
-      </div>
-
-      {msg && (
-        <pre className="mt-2 text-sm opacity-80 whitespace-pre-wrap break-words max-w-[90vw]">
-          {msg}
-        </pre>
       )}
-
-      {/* 你原来的游戏组件可以直接渲染在下面（已位于 Providers 的子树） */}
-      {/* <GameBoard /> 或 <MintOn128 reached={reached128} /> */}
     </main>
   );
 }
