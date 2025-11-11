@@ -2,26 +2,33 @@
 "use client";
 
 import { ReactNode, useState } from "react";
-import { WagmiProvider, createConfig, http } from "wagmi";
-import { injected } from "@wagmi/connectors";
-import { base } from "wagmi/chains";
+import { WagmiProvider } from "wagmi";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 
-// 仅使用 injected，避免引入 MetaMask SDK 等可选依赖的构建噪声
-const wagmiConfig = createConfig({
-  chains: [base],
-  transports: { [base.id]: http() },
-  connectors: [injected()],
-  ssr: true,
-});
+// ✅ 你的 wagmi 配置（如果路径不同，请对应调整）
+import { wagmiConfig } from "../wagmi";
 
-export function Providers({ children }: { children: ReactNode }): JSX.Element {
+// （可选）如果你还在用 Thirdweb 的 <ClaimButton> 等组件，再启用下面两行：
+// import { ThirdwebProvider } from "thirdweb/react";
+// import { base as thirdwebBase } from "thirdweb/chains";
+
+export default function Providers({ children }: { children: ReactNode }) {
+  // 保证 QueryClient 单例
   const [queryClient] = useState(() => new QueryClient());
 
-  // ⚠️ 一定要 return JSX，而不是 return { children }
   return (
     <WagmiProvider config={wagmiConfig}>
       <QueryClientProvider client={queryClient}>
+        {/* 如果需要 Thirdweb，就把 children 套进来（两选一，按你依赖决定） */}
+        {/* 
+        <ThirdwebProvider
+          // 如果你用 thirdweb v5：用 clientId；如果你是旧版：改成 client={createThirdwebClient({ clientId })}
+          clientId={process.env.NEXT_PUBLIC_THIRDWEB_CLIENT_ID}
+          activeChain={thirdwebBase}
+        >
+          {children}
+        </ThirdwebProvider>
+        */}
         {children}
       </QueryClientProvider>
     </WagmiProvider>
