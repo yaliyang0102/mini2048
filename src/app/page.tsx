@@ -1,10 +1,16 @@
 // src/app/page.tsx
-export const dynamic = 'force-dynamic';
+export const dynamic = "force-dynamic";
 export const revalidate = 0;
 
-import NextDynamic from 'next/dynamic';
-const GameClient = NextDynamic(() => import('./game-client'), { ssr: false });
+import NextDynamic from "next/dynamic";
+import ErrorBoundary from "../components/ErrorBoundary";
+
+const GameClient = NextDynamic(() => import("./game-client"), { ssr: false });
 
 export default function Page() {
-  return <GameClient />;
+  return (
+    <ErrorBoundary>
+      <GameClient />
+    </ErrorBoundary>
+  );
 }
