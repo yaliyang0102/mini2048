@@ -13,7 +13,6 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
     <html lang="zh-CN">
       <body>
         <Providers>
-          {/* ✅ 正确用法是 <ErrorBoundary>{children}</ErrorBoundary> */}
           <ErrorBoundary>{children}</ErrorBoundary>
         </Providers>
       </body>
