@@ -12,7 +12,7 @@ export default function Providers({ children }: { children: React.ReactNode }) {
   useEffect(() => {
     (async () => {
       try {
-        await sdk.actions.ready();      // ✅ 向 Farcaster 报到
+        await sdk.actions.ready();     
         // 可选：await sdk.actions.setTitle("mini 2048");
         // 可选：await sdk.actions.setSplashScreen({ hidden: true });
       } catch (err) {
